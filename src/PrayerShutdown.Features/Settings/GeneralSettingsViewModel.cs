@@ -13,6 +13,9 @@ public partial class GeneralSettingsViewModel : ObservableObject
     private readonly ILocationService _locationService;
     private readonly ISchedulerService _scheduler;
 
+    /// <summary>Dashboard subscribes to refresh after settings save.</summary>
+    public event Func<Task>? OnSettingsSaved;
+
     [ObservableProperty] private string _selectedCity = "";
     [ObservableProperty] private string _searchQuery = "";
     [ObservableProperty] private bool _isDetecting;
@@ -111,6 +114,10 @@ public partial class GeneralSettingsViewModel : ObservableObject
 
         await _settingsRepo.SaveAsync(s);
         _scheduler.RecalculateSchedule();
+
+        // Refresh dashboard prayer times with new calculation method
+        if (OnSettingsSaved is not null)
+            await OnSettingsSaved.Invoke();
 
         StatusMessage = Loc.S("settings_saved");
         ShowStatus = true;

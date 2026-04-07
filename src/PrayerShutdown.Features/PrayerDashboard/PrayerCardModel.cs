@@ -17,7 +17,8 @@ public partial class PrayerCardModel : ObservableObject
     [ObservableProperty] private bool _isNext;
     [ObservableProperty] private bool _shutdownEnabled;
     [ObservableProperty] private bool _isPrayed;
-    [ObservableProperty] private bool _canUndo;  // true for 5 seconds after marking
+    [ObservableProperty] private bool _canUndo;
+    [ObservableProperty] private int _undoSecondsLeft;
 
     public bool IsPassed => Time < DateTime.Now;
     public bool IsInformational => Name == PrayerName.Sunrise;
@@ -26,11 +27,10 @@ public partial class PrayerCardModel : ObservableObject
 
     public string LocalizedName => Loc.S($"prayer_{Name.ToString().ToLowerInvariant()}");
     public string PrayedTooltip => Loc.S("mark_prayed");
-    public string UndoTooltip => Loc.S("undo");
+    public string UndoTooltip => $"{Loc.S("undo")} ({UndoSecondsLeft})";
 
     public string StatusText =>
-        CanUndo ? Loc.S("prayed_check") :
-        IsPrayed ? Loc.S("prayed_check") :
+        IsPrayed || CanUndo ? Loc.S("prayed_check") :
         IsInformational ? "" :
         IsPassed ? Loc.S("status_passed") :
         IsNext ? Loc.S("status_now") :
@@ -40,9 +40,25 @@ public partial class PrayerCardModel : ObservableObject
         !IsActionable || IsPassed || IsPrayed ? "" :
         ShutdownEnabled ? $"\u26A1 {Loc.S("shutdown_at")} {Time.AddMinutes(ShutdownDelayMinutes):HH:mm}" : "";
 
+    // Time until this prayer (for upcoming non-next prayers)
+    public string TimeUntilText
+    {
+        get
+        {
+            if (IsInformational || IsPassed || IsNext || IsPrayed) return "";
+            var delta = Time - DateTime.Now;
+            if (delta.TotalMinutes < 1) return "";
+            return delta.TotalHours >= 1
+                ? $"{Loc.S("until")} {(int)delta.TotalHours}h {delta.Minutes}m"
+                : $"{Loc.S("until")} {(int)delta.TotalMinutes}m";
+        }
+    }
+
+    public bool HasTimeUntil => !string.IsNullOrEmpty(TimeUntilText);
+
     public string StatusColor =>
         IsPrayed || CanUndo ? ColorTokens.Success :
-        IsPassed ? ColorTokens.Success :
+        IsPassed ? ColorTokens.Gray :
         IsNext ? ColorTokens.Blue : ColorTokens.Gray;
 
     public double CardOpacity => IsPassed && !IsPrayed ? 0.55 : 1.0;
@@ -65,25 +81,31 @@ public partial class PrayerCardModel : ObservableObject
     [RelayCommand]
     private async Task MarkAsPrayedAsync()
     {
-        // Start 5-second undo window
         _undoCts?.Cancel();
         _undoCts = new CancellationTokenSource();
         var token = _undoCts.Token;
 
         CanUndo = true;
+        UndoSecondsLeft = 5;
         RefreshState();
 
         try
         {
-            await Task.Delay(5000, token);
-            // Undo window expired — commit
+            // Countdown 5→0 with visual feedback
+            for (int i = 5; i > 0; i--)
+            {
+                UndoSecondsLeft = i;
+                OnPropertyChanged(nameof(UndoTooltip));
+                await Task.Delay(1000, token);
+            }
+
             CanUndo = false;
             IsPrayed = true;
             RefreshState();
         }
         catch (TaskCanceledException)
         {
-            // Undo was pressed — already handled in UndoPrayed
+            // Undo pressed
         }
     }
 
@@ -108,5 +130,8 @@ public partial class PrayerCardModel : ObservableObject
         OnPropertyChanged(nameof(AccentColor));
         OnPropertyChanged(nameof(AccentWidth));
         OnPropertyChanged(nameof(ShutdownIconColor));
+        OnPropertyChanged(nameof(TimeUntilText));
+        OnPropertyChanged(nameof(HasTimeUntil));
+        OnPropertyChanged(nameof(UndoTooltip));
     }
 }

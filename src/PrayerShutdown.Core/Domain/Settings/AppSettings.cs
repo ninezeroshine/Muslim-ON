@@ -11,4 +11,5 @@ public sealed class AppSettings
     public bool StartWithWindows { get; set; }
     public bool StartMinimized { get; set; }
     public bool IsOnboardingCompleted { get; set; }
+    public WorkDaySettings WorkDay { get; set; } = new();
 }

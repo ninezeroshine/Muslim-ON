@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using PrayerShutdown.Common;
 using PrayerShutdown.Core.Domain.Enums;
 using PrayerShutdown.Core.Domain.Models;
-using PrayerShutdown.Core.Domain.Settings;
 using PrayerShutdown.Core.Interfaces;
 
 namespace PrayerShutdown.Services.Scheduling;
@@ -11,6 +10,8 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
 {
     private readonly IPrayerTimeCalculator _calculator;
     private readonly ISettingsRepository _settingsRepo;
+    private readonly IShutdownService _shutdownService;
+    private readonly INotificationService _notificationService;
     private readonly ILogger<PrayerScheduler> _logger;
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _reminderTimers = new();
@@ -28,10 +29,14 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     public PrayerScheduler(
         IPrayerTimeCalculator calculator,
         ISettingsRepository settingsRepo,
+        IShutdownService shutdownService,
+        INotificationService notificationService,
         ILogger<PrayerScheduler> logger)
     {
         _calculator = calculator;
         _settingsRepo = settingsRepo;
+        _shutdownService = shutdownService;
+        _notificationService = notificationService;
         _logger = logger;
     }
 
@@ -42,16 +47,17 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         ScheduleMidnightRecalculation();
     }
 
-    public void RecalculateSchedule()
-    {
-        _ = RecalculateAsync();
-    }
+    public void RecalculateSchedule() => _ = RecalculateAsync();
 
     public void MarkAsPrayed(PrayerTime prayer)
     {
         _logger.LogInformation("Prayer marked as prayed: {Prayer}", prayer.Name);
         _prayedToday.TryAdd(prayer.Name, true);
         CancelTimerFor(prayer.Name);
+
+        // Cancel pending shutdown if active
+        if (_shutdownService.HasPendingShutdown)
+            _shutdownService.CancelPendingShutdown();
     }
 
     public void SnoozePrayer(PrayerTime prayer)
@@ -66,9 +72,13 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         _snoozeCounts[prayer.Name] = count + 1;
         _logger.LogInformation("Snoozed {Prayer} ({Count}/{Max})", prayer.Name, count + 1, Constants.MaxSnoozeCount);
 
+        // Cancel pending shutdown
+        if (_shutdownService.HasPendingShutdown)
+            _shutdownService.CancelPendingShutdown();
+
         // Reschedule shutdown timer
         var delay = TimeSpan.FromMinutes(Constants.SnoozeMinutes);
-        _shutdownTimers[prayer.Name]?.Dispose();
+        if (_shutdownTimers.TryGetValue(prayer.Name, out var old)) old?.Dispose();
         _shutdownTimers[prayer.Name] = new Timer(
             _ => OnShutdownTriggered(prayer),
             null, delay, Timeout.InfiniteTimeSpan);
@@ -76,47 +86,55 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
 
     private async Task RecalculateAsync()
     {
-        CancelAllTimers();
-        _prayedToday.Clear();
-        _snoozeCounts.Clear();
-
-        var settings = await _settingsRepo.LoadAsync();
-        var location = settings.Location.SelectedLocation;
-        if (location is null)
+        try
         {
-            _logger.LogWarning("No location configured, skipping schedule");
-            return;
+            CancelAllTimers();
+            _prayedToday.Clear();
+            _snoozeCounts.Clear();
+
+            var settings = await _settingsRepo.LoadAsync();
+            var location = settings.Location.SelectedLocation;
+            if (location is null)
+            {
+                _logger.LogWarning("No location configured, skipping schedule");
+                return;
+            }
+
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            TodaysPrayers = _calculator.Calculate(today, location, settings.Calculation);
+
+            foreach (var rule in settings.Shutdown.Rules.Where(r => r.IsEnabled))
+            {
+                var prayer = TodaysPrayers.GetPrayer(rule.Prayer);
+                if (prayer is null) continue;
+                SchedulePrayer(prayer, rule);
+            }
+
+            _logger.LogInformation("Scheduled {Count} shutdown-enabled prayers for {Date}",
+                settings.Shutdown.Rules.Count(r => r.IsEnabled), today);
         }
-
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        TodaysPrayers = _calculator.Calculate(today, location, settings.Calculation);
-
-        foreach (var rule in settings.Shutdown.Rules.Where(r => r.IsEnabled))
+        catch (Exception ex)
         {
-            var prayer = TodaysPrayers.GetPrayer(rule.Prayer);
-            if (prayer is null) continue;
-
-            SchedulePrayer(prayer, rule);
+            _logger.LogError(ex, "Failed to recalculate prayer schedule");
         }
-
-        _logger.LogInformation("Scheduled {Count} prayers for {Date}", TodaysPrayers.Prayers.Count, today);
     }
 
     private void SchedulePrayer(PrayerTime prayer, PrayerShutdownRule rule)
     {
         var now = DateTime.Now;
 
-        // Reminder timer
+        // Reminder: X minutes before prayer
         var reminderTime = prayer.Time.AddMinutes(-rule.ReminderMinutesBefore);
         if (reminderTime > now)
         {
             var delay = reminderTime - now;
             _reminderTimers[prayer.Name] = new Timer(
-                _ => OnPrayerApproaching(prayer),
+                _ => OnPrayerApproaching(prayer, rule.ReminderMinutesBefore),
                 null, delay, Timeout.InfiniteTimeSpan);
+            _logger.LogDebug("Reminder for {Prayer} in {Delay}", prayer.Name, delay);
         }
 
-        // Shutdown timer
+        // Shutdown: X minutes after prayer
         var shutdownTime = prayer.Time.AddMinutes(rule.ShutdownMinutesAfter);
         if (shutdownTime > now)
         {
@@ -124,21 +142,32 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
             _shutdownTimers[prayer.Name] = new Timer(
                 _ => OnShutdownTriggered(prayer),
                 null, delay, Timeout.InfiniteTimeSpan);
+            _logger.LogDebug("Shutdown for {Prayer} in {Delay}", prayer.Name, delay);
         }
     }
 
-    private void OnPrayerApproaching(PrayerTime prayer)
+    private void OnPrayerApproaching(PrayerTime prayer, int minutesBefore)
     {
         if (_prayedToday.ContainsKey(prayer.Name)) return;
-        _logger.LogInformation("Prayer approaching: {Prayer}", prayer.Name);
+        _logger.LogInformation("Prayer approaching: {Prayer} in {Min} min", prayer.Name, minutesBefore);
+
+        // Fire event for UI popup
         PrayerTimeApproaching?.Invoke(this, prayer);
+
+        // Also send notification
+        _ = _notificationService.ShowPrayerReminderAsync(prayer, minutesBefore);
     }
 
     private void OnShutdownTriggered(PrayerTime prayer)
     {
         if (_prayedToday.ContainsKey(prayer.Name)) return;
-        _logger.LogWarning("Shutdown triggered for: {Prayer}", prayer.Name);
+        _logger.LogWarning("SHUTDOWN TRIGGERED for: {Prayer}", prayer.Name);
+
+        // Fire event for UI (popup with cancel option)
         ShutdownTriggered?.Invoke(this, prayer);
+
+        // Execute actual shutdown
+        _shutdownService.ExecuteShutdown();
     }
 
     private void ScheduleMidnightRecalculation()

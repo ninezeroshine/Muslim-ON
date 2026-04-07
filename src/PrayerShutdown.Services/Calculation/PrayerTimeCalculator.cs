@@ -23,7 +23,8 @@ public sealed class PrayerTimeCalculator : IPrayerTimeCalculator
 
         double noon = SolarMath.MidDay(eqt, lng, tz);
 
-        // Sunrise & Sunset: sun center at -0.8333 deg (refraction + solar disc radius)
+        // Sunrise & Sunset: 0.8333° = refraction(0.583°) + solar disc radius(0.25°)
+        // Using 0.8333 matches most calculation sources
         double sunHA = SolarMath.HourAngle(0.8333, lat, decl);
         double sunrise = noon - sunHA;
         double sunset = noon + sunHA;
@@ -40,7 +41,7 @@ public sealed class PrayerTimeCalculator : IPrayerTimeCalculator
         double asrHA = SolarMath.AsrHourAngle(shadowRatio, lat, decl);
         double asr = noon + asrHA;
 
-        // Maghrib: at sunset, or custom angle
+        // Maghrib: at sunset + safety margin (most authorities add 1-3 min)
         double maghrib;
         if (param.MaghribAngle.HasValue)
         {
@@ -49,7 +50,7 @@ public sealed class PrayerTimeCalculator : IPrayerTimeCalculator
         }
         else
         {
-            maghrib = sunset;
+            maghrib = sunset + 2.0 / 60.0; // +2 min standard safety after geometric sunset
         }
 
         // Isha: angle-based or minutes after maghrib

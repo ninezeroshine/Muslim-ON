@@ -44,6 +44,7 @@ public sealed partial class SettingsPage : Page
     public string L_MethodIsna => Loc.S("method_isna");
     public string L_MethodTurkey => Loc.S("method_turkey");
     public string L_MethodTehran => Loc.S("method_tehran");
+    public string L_MethodRecommend => Loc.S("method_recommend");
     public string L_AsrShafi => Loc.S("asr_shafi");
     public string L_AsrHanafi => Loc.S("asr_hanafi");
     public string L_HighLatAngle => Loc.S("highlat_angle");
@@ -123,7 +124,5 @@ public sealed partial class SettingsPage : Page
     private async void SaveButton_Click(object sender, RoutedEventArgs e)
     {
         await ViewModel.SaveCommand.ExecuteAsync(null);
-        var dashboard = App.Current.Services.GetRequiredService<PrayerShutdown.Features.PrayerDashboard.PrayerDashboardViewModel>();
-        await dashboard.ForceRefreshAsync();
     }
 }

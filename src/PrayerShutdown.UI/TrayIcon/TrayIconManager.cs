@@ -2,6 +2,7 @@ using System.Drawing;
 using H.NotifyIcon;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using PrayerShutdown.Common.Localization;
 using PrayerShutdown.Core.Extensions;
 using PrayerShutdown.Core.Interfaces;
@@ -26,44 +27,69 @@ public sealed class TrayIconManager : IDisposable
         _mainWindow = mainWindow;
         _dispatcher = DispatcherQueue.GetForCurrentThread();
 
+        _trayIcon = new TaskbarIcon
+        {
+            ToolTipText = "Muslim ON",
+            NoLeftClickDelay = true,
+        };
+
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
-        Icon? icon = File.Exists(iconPath) ? new Icon(iconPath) : null;
-
-        _trayIcon = new TaskbarIcon();
-        _trayIcon.ToolTipText = "Muslim ON";
-        _trayIcon.NoLeftClickDelay = true;
-
-        if (icon is not null)
-            _trayIcon.Icon = icon;
+        if (File.Exists(iconPath))
+            _trayIcon.Icon = new Icon(iconPath);
 
         _trayIcon.LeftClickCommand = new SimpleCommand(ShowWindow);
+        _trayIcon.RightClickCommand = new SimpleCommand(ShowTrayMenu);
 
-        // Update tooltip every 30 seconds (marshal to UI thread)
+        _trayIcon.ForceCreate();
+
         _tooltipTimer = new Timer(_ =>
             _dispatcher?.TryEnqueue(UpdateTooltip),
             null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30));
     }
 
+    private void ShowTrayMenu()
+    {
+        _dispatcher?.TryEnqueue(() =>
+        {
+            if (_mainWindow is null) return;
+
+            // Ensure window is visible so MenuFlyout has a XamlRoot
+            _mainWindow.Activate();
+
+            var menu = new MenuFlyout();
+
+            var openItem = new MenuFlyoutItem { Text = Loc.S("tray_open") };
+            openItem.Click += (_, _) => ShowWindow();
+            menu.Items.Add(openItem);
+
+            menu.Items.Add(new MenuFlyoutSeparator());
+
+            var exitItem = new MenuFlyoutItem
+            {
+                Text = Loc.S("tray_exit"),
+                Icon = new FontIcon { Glyph = "\uE7E8", FontSize = 12 }
+            };
+            exitItem.Click += (_, _) => ExitApplication();
+            menu.Items.Add(exitItem);
+
+            // Show at top-left of content (will appear near tray area)
+            if (_mainWindow.Content is FrameworkElement root)
+                menu.ShowAt(root, new Windows.Foundation.Point(root.ActualWidth - 160, 0));
+        });
+    }
+
     private void UpdateTooltip()
     {
         if (_trayIcon is null) return;
-
         var next = _scheduler.NextPrayer;
-        if (next is null)
-        {
-            _trayIcon.ToolTipText = "Muslim ON";
-            return;
-        }
+        if (next is null) { _trayIcon.ToolTipText = "Muslim ON"; return; }
 
         var remaining = next.Time.TimeUntil().ToCountdownString();
         var name = Loc.S($"prayer_{next.Name.ToString().ToLowerInvariant()}");
         _trayIcon.ToolTipText = $"Muslim ON — {name} {Loc.S("until")} {remaining}";
     }
 
-    public void ShowWindow()
-    {
-        _mainWindow?.Activate();
-    }
+    public void ShowWindow() => _mainWindow?.Activate();
 
     public void ExitApplication()
     {

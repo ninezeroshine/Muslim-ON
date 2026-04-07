@@ -19,6 +19,9 @@ public partial class PrayerDashboardViewModel : ObservableObject
     private readonly UpdateService _updateService;
     private bool _initialized;
 
+    /// <summary>Code-behind hooks this to redraw Canvas after data changes.</summary>
+    public event Action? TimelineChanged;
+
     // ── Core ──
     [ObservableProperty] private ObservableCollection<PrayerCardModel> _prayers = new();
     [ObservableProperty] private string _countdownText = "--:--";
@@ -61,6 +64,22 @@ public partial class PrayerDashboardViewModel : ObservableObject
     // ── Feature 4: Day timeline ──
     [ObservableProperty] private double _currentTimePosition;
     [ObservableProperty] private ObservableCollection<TimelineDotModel> _timelineDots = new();
+
+    // ── Work day overlay ──
+    [ObservableProperty] private bool _workDayEnabled;
+    [ObservableProperty] private double _workDayStartPos;
+    [ObservableProperty] private double _workDayEndPos;
+    [ObservableProperty] private string _workDayStartText = "09:00";
+    [ObservableProperty] private string _workDayEndText = "18:00";
+    [ObservableProperty] private string _workDayElapsed = "";
+    [ObservableProperty] private string _workDayRemaining = "";
+    [ObservableProperty] private string _workDayCenter = "";
+    [ObservableProperty] private bool _showWorkDayEditor;
+    [ObservableProperty] private int _editWorkStartHour = 9;
+    [ObservableProperty] private int _editWorkStartMinute = 0;
+    [ObservableProperty] private int _editWorkEndHour = 18;
+    [ObservableProperty] private int _editWorkEndMinute = 0;
+    [ObservableProperty] private bool _editWorkDayEnabled;
 
     // ── Feature 5: Wisdom ──
     [ObservableProperty] private string _wisdomText = "";
@@ -122,6 +141,20 @@ public partial class PrayerDashboardViewModel : ObservableObject
             WisdomSource = wSrc;
 
             var settings = await _settingsRepo.LoadAsync();
+
+            // Load work day
+            var wd = settings.WorkDay;
+            WorkDayEnabled = wd.Enabled;
+            WorkDayStartPos = wd.StartPosition;
+            WorkDayEndPos = wd.EndPosition;
+            WorkDayStartText = wd.StartFormatted;
+            WorkDayEndText = wd.EndFormatted;
+            EditWorkStartHour = wd.StartHour;
+            EditWorkStartMinute = wd.StartMinute;
+            EditWorkEndHour = wd.EndHour;
+            EditWorkEndMinute = wd.EndMinute;
+            EditWorkDayEnabled = wd.Enabled;
+
             var location = settings.Location.SelectedLocation;
 
             if (location is null)
@@ -234,6 +267,7 @@ public partial class PrayerDashboardViewModel : ObservableObject
         };
 
         UpdateProgress(now, nextCard);
+        UpdateWorkDayInfo(now);
         CurrentTimePosition = now.TimeOfDay.TotalMinutes / 1440.0;
     }
 
@@ -266,8 +300,53 @@ public partial class PrayerDashboardViewModel : ObservableObject
     }
 
     private static string FormatShortSpan(TimeSpan s) =>
-        s.TotalHours >= 1 ? $"{(int)s.TotalHours}h {s.Minutes}m"
-                          : $"{(int)s.TotalMinutes}m";
+        s.TotalHours >= 1
+            ? s.Minutes > 0 ? $"{(int)s.TotalHours}{Loc.S("h")} {s.Minutes}{Loc.S("m")}"
+                            : $"{(int)s.TotalHours}{Loc.S("h")}"
+            : $"{Math.Max(1, (int)s.TotalMinutes)}{Loc.S("m")}";
+
+    // ═══════════════════════════════════════════
+    //  Work day info
+    // ═══════════════════════════════════════════
+
+    private void UpdateWorkDayInfo(DateTime now)
+    {
+        if (!WorkDayEnabled) return;
+
+        var startMin = EditWorkStartHour * 60 + EditWorkStartMinute;
+        var endMin = EditWorkEndHour * 60 + EditWorkEndMinute;
+        var nowMin = now.Hour * 60 + now.Minute;
+        var totalMin = endMin - startMin;
+        if (totalMin <= 0) return;
+
+        var totalSpan = TimeSpan.FromMinutes(totalMin);
+        WorkDayCenter = $"{WorkDayStartText} \u2013 {WorkDayEndText} \u00b7 {FormatShortSpan(totalSpan)}";
+
+        if (nowMin < startMin)
+        {
+            // Before work
+            var until = TimeSpan.FromMinutes(startMin - nowMin);
+            WorkDayElapsed = $"{Loc.S("work_starts_in")} {FormatShortSpan(until)}";
+            WorkDayRemaining = FormatShortSpan(totalSpan);
+        }
+        else if (nowMin >= endMin)
+        {
+            // After work
+            var overtime = TimeSpan.FromMinutes(nowMin - endMin);
+            WorkDayElapsed = FormatShortSpan(totalSpan);
+            WorkDayRemaining = overtime.TotalMinutes > 0
+                ? $"+{FormatShortSpan(overtime)}"
+                : Loc.S("work_done");
+        }
+        else
+        {
+            // During work
+            var elapsed = TimeSpan.FromMinutes(nowMin - startMin);
+            var remaining = TimeSpan.FromMinutes(endMin - nowMin);
+            WorkDayElapsed = FormatShortSpan(elapsed);
+            WorkDayRemaining = FormatShortSpan(remaining);
+        }
+    }
 
     // ═══════════════════════════════════════════
     //  Card property change handlers
@@ -314,6 +393,27 @@ public partial class PrayerDashboardViewModel : ObservableObject
     [RelayCommand] private void ExpandShutdownInfo()   { ShowShutdownInfo = true;  OnPropertyChanged(nameof(ShowShutdownHint)); }
     [RelayCommand] private void DismissWisdom()        { ShowWisdom = false; }
     [RelayCommand] private void ExpandWisdom()         { ShowWisdom = true; }
+    [RelayCommand] private void ToggleWorkDayEditor()  { ShowWorkDayEditor = !ShowWorkDayEditor; }
+
+    [RelayCommand]
+    private async Task SaveWorkDayAsync()
+    {
+        var settings = await _settingsRepo.LoadAsync();
+        settings.WorkDay.Enabled = EditWorkDayEnabled;
+        settings.WorkDay.StartHour = EditWorkStartHour;
+        settings.WorkDay.StartMinute = EditWorkStartMinute;
+        settings.WorkDay.EndHour = EditWorkEndHour;
+        settings.WorkDay.EndMinute = EditWorkEndMinute;
+        await _settingsRepo.SaveAsync(settings);
+
+        WorkDayEnabled = EditWorkDayEnabled;
+        WorkDayStartPos = settings.WorkDay.StartPosition;
+        WorkDayEndPos = settings.WorkDay.EndPosition;
+        WorkDayStartText = settings.WorkDay.StartFormatted;
+        WorkDayEndText = settings.WorkDay.EndFormatted;
+        ShowWorkDayEditor = false;
+        TimelineChanged?.Invoke();
+    }
 
     // ═══════════════════════════════════════════
     //  Auto-update

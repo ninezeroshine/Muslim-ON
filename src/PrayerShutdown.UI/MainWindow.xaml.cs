@@ -20,7 +20,7 @@ public sealed partial class MainWindow : Window
         Title = "Muslim ON";
         ExtendsContentIntoTitleBar = true;
 
-        SetWindowSize(900, 640);
+        SetWindowSize(1060, 740);
         SetWindowIcon();
 
         // Closing → hide to tray instead of exiting

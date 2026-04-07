@@ -45,21 +45,30 @@ public static class HostBuilderExtensions
             services.AddSingleton<IAdhanPlayer, AdhanPlayer>();
             services.AddSingleton<UpdateService>();
 
-            // Scheduler — singleton, creates its own scoped dependencies via factory
-            services.AddSingleton<ISchedulerService>(sp =>
-            {
-                var calculator = sp.GetRequiredService<IPrayerTimeCalculator>();
-                var settingsRepo = sp.GetRequiredService<ISettingsRepository>();
-                var logger = sp.GetRequiredService<ILogger<PrayerScheduler>>();
-                return new PrayerScheduler(calculator, settingsRepo, logger);
-            });
+            // Scheduler — singleton with all dependencies
+            services.AddSingleton<ISchedulerService>(sp => new PrayerScheduler(
+                sp.GetRequiredService<IPrayerTimeCalculator>(),
+                sp.GetRequiredService<ISettingsRepository>(),
+                sp.GetRequiredService<IShutdownService>(),
+                sp.GetRequiredService<INotificationService>(),
+                sp.GetRequiredService<ILogger<PrayerScheduler>>()));
 
             // Navigation
             services.AddSingleton<NavigationService>();
 
             // ViewModels
             services.AddSingleton<PrayerDashboardViewModel>();
-            services.AddTransient<GeneralSettingsViewModel>();
+            services.AddSingleton<GeneralSettingsViewModel>(sp =>
+            {
+                var vm = new GeneralSettingsViewModel(
+                    sp.GetRequiredService<ISettingsRepository>(),
+                    sp.GetRequiredService<ILocationService>(),
+                    sp.GetRequiredService<ISchedulerService>());
+                // Wire settings save → dashboard refresh
+                var dashboard = sp.GetRequiredService<PrayerDashboardViewModel>();
+                vm.OnSettingsSaved += dashboard.ForceRefreshAsync;
+                return vm;
+            });
 
             // Window
             services.AddSingleton<MainWindow>();

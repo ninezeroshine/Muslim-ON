@@ -101,14 +101,15 @@ public sealed class LocalizationService
         ["settings_saved"] = "Settings saved successfully",
         ["location_set_to"] = "Location set to",
 
-        // Calculation methods
-        ["method_mwl"] = "MWL (Muslim World League)",
-        ["method_egyptian"] = "Egyptian General Authority",
-        ["method_karachi"] = "University of Karachi",
-        ["method_ummAlQura"] = "Umm al-Qura, Makkah",
-        ["method_isna"] = "ISNA (North America)",
-        ["method_turkey"] = "Diyanet (Turkey)",
-        ["method_tehran"] = "Tehran Institute",
+        // Calculation methods (name + region hint)
+        ["method_mwl"] = "MWL \u2014 Europe, Asia, worldwide default",
+        ["method_egyptian"] = "Egyptian \u2014 Africa, Middle East",
+        ["method_karachi"] = "Karachi \u2014 Pakistan, Bangladesh, India",
+        ["method_ummAlQura"] = "Umm al-Qura \u2014 Saudi Arabia",
+        ["method_isna"] = "ISNA \u2014 North America",
+        ["method_turkey"] = "Diyanet \u2014 Turkey, Central Asia",
+        ["method_tehran"] = "Tehran \u2014 Iran, Shia communities",
+        ["method_recommend"] = "Recommended for Russia: MWL or Diyanet",
 
         // Asr methods
         ["asr_shafi"] = "Shafi'i / Maliki / Hanbali (shadow = 1x)",
@@ -133,7 +134,7 @@ public sealed class LocalizationService
 
         // About
         ["about_title"] = "Muslim ON",
-        ["about_version"] = "Version 1.0.3",
+        ["about_version"] = "Version 1.1.0",
         ["about_desc"] = "Automatic prayer time reminders with optional PC shutdown. Helps you maintain your daily prayers.",
         ["about_tech"] = "Built with WinUI 3 + .NET 8",
         ["about_algorithm"] = "Prayer times: PrayTimes.org algorithm",
@@ -163,6 +164,29 @@ public sealed class LocalizationService
         ["update_version"] = "Version {0} is ready to install",
         ["update_now"] = "Update Now",
         ["updating"] = "Updating\u2026",
+
+        // Work day
+        ["work_day"] = "Work Day",
+        ["work_day_start"] = "Start",
+        ["work_day_end"] = "End",
+        ["work_day_edit"] = "Edit",
+        ["work_day_save"] = "Save",
+        ["work_day_enable"] = "Show on timeline",
+        ["work_starts_in"] = "in",
+        ["work_done"] = "done",
+        ["h"] = "h",
+        ["m"] = "m",
+
+        // Shutdown popups
+        ["prayer_approaching_title"] = "Prayer Time Approaching",
+        ["prayer_approaching_desc"] = "It's almost time for prayer. If shutdown is enabled and you don't respond, your PC will shut down after the prayer time.",
+        ["shutdown_warning_title"] = "PC Shutting Down!",
+        ["shutdown_warning_desc"] = "You didn't respond to the prayer reminder. Your PC will shut down in 60 seconds. Click a button to cancel.",
+        ["cancel_shutdown"] = "Cancel Shutdown",
+
+        // Tray menu
+        ["tray_open"] = "Open Muslim ON",
+        ["tray_exit"] = "Exit",
     };
 
     // ════════════════════════════════════════════
@@ -226,14 +250,15 @@ public sealed class LocalizationService
         ["settings_saved"] = "Настройки успешно сохранены",
         ["location_set_to"] = "Установлен город",
 
-        // Методы расчёта
-        ["method_mwl"] = "MWL (Всемирная мусульманская лига)",
-        ["method_egyptian"] = "Египетское управление",
-        ["method_karachi"] = "Университет Карачи",
-        ["method_ummAlQura"] = "Умм аль-Кура, Мекка",
-        ["method_isna"] = "ISNA (Северная Америка)",
-        ["method_turkey"] = "Диянет (Турция)",
-        ["method_tehran"] = "Тегеранский институт",
+        // Методы расчёта (название + регион)
+        ["method_mwl"] = "MWL \u2014 Европа, Азия, по умолчанию",
+        ["method_egyptian"] = "Египетский \u2014 Африка, Ближний Восток",
+        ["method_karachi"] = "Карачи \u2014 Пакистан, Бангладеш, Индия",
+        ["method_ummAlQura"] = "Умм аль-Кура \u2014 Саудовская Аравия",
+        ["method_isna"] = "ISNA \u2014 Северная Америка",
+        ["method_turkey"] = "Диянет \u2014 Турция, Центральная Азия",
+        ["method_tehran"] = "Тегеран \u2014 Иран, шиитские общины",
+        ["method_recommend"] = "Рекомендуется для России: MWL или Диянет",
 
         // Методы Асра
         ["asr_shafi"] = "Шафии / Малики / Ханбали (тень = 1x)",
@@ -258,7 +283,7 @@ public sealed class LocalizationService
 
         // О приложении
         ["about_title"] = "Muslim ON",
-        ["about_version"] = "Версия 1.0.3",
+        ["about_version"] = "Версия 1.1.0",
         ["about_desc"] = "Автоматические напоминания о намазе с возможностью выключения ПК. Помогает соблюдать ежедневные молитвы.",
         ["about_tech"] = "Создано на WinUI 3 + .NET 8",
         ["about_algorithm"] = "Расчёт времён: алгоритм PrayTimes.org",
@@ -288,6 +313,29 @@ public sealed class LocalizationService
         ["update_version"] = "Версия {0} готова к установке",
         ["update_now"] = "Обновить",
         ["updating"] = "Обновление\u2026",
+
+        // Рабочий день
+        ["work_day"] = "Рабочий день",
+        ["work_day_start"] = "Начало",
+        ["work_day_end"] = "Конец",
+        ["work_day_edit"] = "Настроить",
+        ["work_day_save"] = "Сохранить",
+        ["work_day_enable"] = "Показать на таймлайне",
+        ["work_starts_in"] = "через",
+        ["work_done"] = "готово",
+        ["h"] = "ч",
+        ["m"] = "м",
+
+        // Попапы выключения
+        ["prayer_approaching_title"] = "Приближается время намаза",
+        ["prayer_approaching_desc"] = "Скоро время молитвы. Если включено выключение и вы не ответите, ПК выключится после наступления времени намаза.",
+        ["shutdown_warning_title"] = "ПК выключается!",
+        ["shutdown_warning_desc"] = "Вы не ответили на напоминание о намазе. ПК выключится через 60 секунд. Нажмите кнопку, чтобы отменить.",
+        ["cancel_shutdown"] = "Отменить выключение",
+
+        // Меню в трее
+        ["tray_open"] = "Открыть Muslim ON",
+        ["tray_exit"] = "Выход",
     };
 }
 

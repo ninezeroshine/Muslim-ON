@@ -6,7 +6,7 @@
     Background="Transparent">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Padding="32,20,32,32" Spacing="20" MaxWidth="600" HorizontalAlignment="Center">
+        <StackPanel Padding="32,20,32,32" Spacing="20" MaxWidth="720" HorizontalAlignment="Center">
 
             <TextBlock Text="{x:Bind L_Settings}" Style="{StaticResource GeistHeading3Style}" />
 
@@ -43,6 +43,8 @@
                             <ComboBoxItem Content="{x:Bind L_MethodTurkey}" Tag="Turkey" />
                             <ComboBoxItem Content="{x:Bind L_MethodTehran}" Tag="Tehran" />
                         </ComboBox>
+                        <TextBlock Text="{x:Bind L_MethodRecommend}" FontSize="12" FontWeight="Medium"
+                                   Foreground="{ThemeResource GeistBlue700Brush}" TextWrapping="Wrap" />
                         <ComboBox Header="{x:Bind L_AsrCalc}" HorizontalAlignment="Stretch" x:Name="AsrCombo" SelectionChanged="AsrCombo_Changed">
                             <ComboBoxItem Content="{x:Bind L_AsrShafi}" Tag="Shafi" />
                             <ComboBoxItem Content="{x:Bind L_AsrHanafi}" Tag="Hanafi" />
