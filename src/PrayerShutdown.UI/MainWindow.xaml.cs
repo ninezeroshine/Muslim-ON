@@ -23,7 +23,17 @@ public sealed partial class MainWindow : Window
         SetWindowSize(900, 640);
         SetWindowIcon();
 
+        // Closing → hide to tray instead of exiting
+        this.Closed += OnClosed;
+
         RootFrame.Navigate(typeof(ShellPage));
+    }
+
+    private void OnClosed(object sender, WindowEventArgs args)
+    {
+        // Prevent exit — hide window, keep running in tray
+        args.Handled = true;
+        this.AppWindow.Hide();
     }
 
     private void SetWindowSize(int width, int height)

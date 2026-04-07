@@ -1,5 +1,8 @@
+using System.Drawing;
 using H.NotifyIcon;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using PrayerShutdown.Common.Localization;
 using PrayerShutdown.Core.Extensions;
 using PrayerShutdown.Core.Interfaces;
 
@@ -11,6 +14,7 @@ public sealed class TrayIconManager : IDisposable
     private TaskbarIcon? _trayIcon;
     private Timer? _tooltipTimer;
     private Window? _mainWindow;
+    private DispatcherQueue? _dispatcher;
 
     public TrayIconManager(ISchedulerService scheduler)
     {
@@ -20,37 +24,51 @@ public sealed class TrayIconManager : IDisposable
     public void Initialize(Window mainWindow)
     {
         _mainWindow = mainWindow;
+        _dispatcher = DispatcherQueue.GetForCurrentThread();
 
-        _trayIcon = new TaskbarIcon
-        {
-            ToolTipText = "Muslim ON",
-            NoLeftClickDelay = true,
-        };
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
+        Icon? icon = File.Exists(iconPath) ? new Icon(iconPath) : null;
 
-        _trayIcon.LeftClickCommand = new RelayCommand(ShowWindow);
+        _trayIcon = new TaskbarIcon();
+        _trayIcon.ToolTipText = "Muslim ON";
+        _trayIcon.NoLeftClickDelay = true;
 
-        // Update tooltip every 30 seconds
-        _tooltipTimer = new Timer(_ => UpdateTooltip(), null,
-            TimeSpan.Zero, TimeSpan.FromSeconds(30));
+        if (icon is not null)
+            _trayIcon.Icon = icon;
+
+        _trayIcon.LeftClickCommand = new SimpleCommand(ShowWindow);
+
+        // Update tooltip every 30 seconds (marshal to UI thread)
+        _tooltipTimer = new Timer(_ =>
+            _dispatcher?.TryEnqueue(UpdateTooltip),
+            null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30));
     }
 
     private void UpdateTooltip()
     {
+        if (_trayIcon is null) return;
+
         var next = _scheduler.NextPrayer;
         if (next is null)
         {
-            _trayIcon!.ToolTipText = "Muslim ON";
+            _trayIcon.ToolTipText = "Muslim ON";
             return;
         }
 
         var remaining = next.Time.TimeUntil().ToCountdownString();
-        _trayIcon!.ToolTipText = $"Next: {next.Name} in {remaining}";
+        var name = Loc.S($"prayer_{next.Name.ToString().ToLowerInvariant()}");
+        _trayIcon.ToolTipText = $"Muslim ON — {name} {Loc.S("until")} {remaining}";
     }
 
     public void ShowWindow()
     {
-        if (_mainWindow is null) return;
-        _mainWindow.Activate();
+        _mainWindow?.Activate();
+    }
+
+    public void ExitApplication()
+    {
+        Dispose();
+        Application.Current.Exit();
     }
 
     public void Dispose()
@@ -59,10 +77,10 @@ public sealed class TrayIconManager : IDisposable
         _trayIcon?.Dispose();
     }
 
-    private sealed class RelayCommand : System.Windows.Input.ICommand
+    private sealed class SimpleCommand : System.Windows.Input.ICommand
     {
         private readonly Action _execute;
-        public RelayCommand(Action execute) => _execute = execute;
+        public SimpleCommand(Action execute) => _execute = execute;
 #pragma warning disable CS0067
         public event EventHandler? CanExecuteChanged;
 #pragma warning restore CS0067

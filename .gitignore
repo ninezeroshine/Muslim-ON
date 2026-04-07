@@ -56,3 +56,6 @@ appsettings.*.json
 !appsettings.json
 MuslimON_v1.0_x64.zip
 priconfig.xml
+*.zip
+priconfig.xml
+Design-ref.md
