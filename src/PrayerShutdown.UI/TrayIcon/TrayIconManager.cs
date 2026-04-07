@@ -1,8 +1,8 @@
 using System.Drawing;
+using System.Runtime.InteropServices;
 using H.NotifyIcon;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using PrayerShutdown.Common.Localization;
 using PrayerShutdown.Core.Extensions;
 using PrayerShutdown.Core.Interfaces;
@@ -17,6 +17,10 @@ public sealed class TrayIconManager : IDisposable
     private Window? _mainWindow;
     private DispatcherQueue? _dispatcher;
 
+    // Win32 menu item IDs
+    private const int ID_OPEN = 1;
+    private const int ID_EXIT = 2;
+
     public TrayIconManager(ISchedulerService scheduler)
     {
         _scheduler = scheduler;
@@ -26,6 +30,9 @@ public sealed class TrayIconManager : IDisposable
     {
         _mainWindow = mainWindow;
         _dispatcher = DispatcherQueue.GetForCurrentThread();
+
+        // Enable dark context menus to match app theme
+        NativeMenu.EnableDarkMode();
 
         _trayIcon = new TaskbarIcon
         {
@@ -38,7 +45,7 @@ public sealed class TrayIconManager : IDisposable
             _trayIcon.Icon = new Icon(iconPath);
 
         _trayIcon.LeftClickCommand = new SimpleCommand(ShowWindow);
-        _trayIcon.RightClickCommand = new SimpleCommand(ShowTrayMenu);
+        _trayIcon.RightClickCommand = new SimpleCommand(ShowNativeContextMenu);
 
         _trayIcon.ForceCreate();
 
@@ -47,34 +54,33 @@ public sealed class TrayIconManager : IDisposable
             null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30));
     }
 
-    private void ShowTrayMenu()
+    /// <summary>
+    /// Shows a native Win32 popup menu at the cursor position (next to tray icon).
+    /// </summary>
+    private void ShowNativeContextMenu()
     {
         _dispatcher?.TryEnqueue(() =>
         {
-            if (_mainWindow is null) return;
+            var hMenu = NativeMenu.CreatePopupMenu();
+            NativeMenu.AppendMenu(hMenu, 0x0000, ID_OPEN, Loc.S("tray_open")); // MF_STRING
+            NativeMenu.AppendMenu(hMenu, 0x0800, 0, null);                      // MF_SEPARATOR
+            NativeMenu.AppendMenu(hMenu, 0x0000, ID_EXIT, Loc.S("tray_exit")); // MF_STRING
 
-            // Ensure window is visible so MenuFlyout has a XamlRoot
-            _mainWindow.Activate();
+            // Get cursor position for menu placement
+            NativeMenu.GetCursorPos(out var pt);
 
-            var menu = new MenuFlyout();
+            // Required: set foreground so menu dismisses on click-away
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_mainWindow);
+            NativeMenu.SetForegroundWindow(hwnd);
 
-            var openItem = new MenuFlyoutItem { Text = Loc.S("tray_open") };
-            openItem.Click += (_, _) => ShowWindow();
-            menu.Items.Add(openItem);
+            int cmd = NativeMenu.TrackPopupMenu(hMenu,
+                0x0100 | 0x0002 | 0x0008, // TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN
+                pt.X, pt.Y, 0, hwnd, IntPtr.Zero);
 
-            menu.Items.Add(new MenuFlyoutSeparator());
+            NativeMenu.DestroyMenu(hMenu);
 
-            var exitItem = new MenuFlyoutItem
-            {
-                Text = Loc.S("tray_exit"),
-                Icon = new FontIcon { Glyph = "\uE7E8", FontSize = 12 }
-            };
-            exitItem.Click += (_, _) => ExitApplication();
-            menu.Items.Add(exitItem);
-
-            // Show at top-left of content (will appear near tray area)
-            if (_mainWindow.Content is FrameworkElement root)
-                menu.ShowAt(root, new Windows.Foundation.Point(root.ActualWidth - 160, 0));
+            if (cmd == ID_OPEN) ShowWindow();
+            else if (cmd == ID_EXIT) ExitApplication();
         });
     }
 
@@ -112,5 +118,35 @@ public sealed class TrayIconManager : IDisposable
 #pragma warning restore CS0067
         public bool CanExecute(object? parameter) => true;
         public void Execute(object? parameter) => _execute();
+    }
+
+    /// <summary>Win32 native context menu API — appears at cursor position near tray.</summary>
+    private static class NativeMenu
+    {
+        [DllImport("user32.dll")] public static extern IntPtr CreatePopupMenu();
+        [DllImport("user32.dll")] public static extern bool DestroyMenu(IntPtr hMenu);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern bool AppendMenu(IntPtr hMenu, uint uFlags, nint uIDNewItem, string? lpNewItem);
+        [DllImport("user32.dll")]
+        public static extern int TrackPopupMenu(IntPtr hMenu, uint uFlags, int x, int y, int nReserved, IntPtr hWnd, IntPtr prcRect);
+        [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT lpPoint);
+
+        // Enable dark mode for context menus (Windows 10 1903+)
+        // uxtheme.dll ordinal 135 — used by Explorer, Notepad, Terminal etc.
+        [DllImport("uxtheme.dll", EntryPoint = "#135")]
+        public static extern int SetPreferredAppMode(int mode); // 0=Default, 1=AllowDark, 2=ForceDark
+
+        [DllImport("uxtheme.dll", EntryPoint = "#136")]
+        public static extern void FlushMenuThemes();
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT { public int X; public int Y; }
+
+        /// <summary>Call once at startup to enable dark context menus.</summary>
+        public static void EnableDarkMode()
+        {
+            try { SetPreferredAppMode(2); FlushMenuThemes(); } catch { }
+        }
     }
 }
