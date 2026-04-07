@@ -133,7 +133,7 @@ public sealed class LocalizationService
 
         // About
         ["about_title"] = "Muslim ON",
-        ["about_version"] = "Version 1.0.1",
+        ["about_version"] = "Version 1.0.2",
         ["about_desc"] = "Automatic prayer time reminders with optional PC shutdown. Helps you maintain your daily prayers.",
         ["about_tech"] = "Built with WinUI 3 + .NET 8",
         ["about_algorithm"] = "Prayer times: PrayTimes.org algorithm",
@@ -258,7 +258,7 @@ public sealed class LocalizationService
 
         // О приложении
         ["about_title"] = "Muslim ON",
-        ["about_version"] = "Версия 1.0.1",
+        ["about_version"] = "Версия 1.0.2",
         ["about_desc"] = "Автоматические напоминания о намазе с возможностью выключения ПК. Помогает соблюдать ежедневные молитвы.",
         ["about_tech"] = "Создано на WinUI 3 + .NET 8",
         ["about_algorithm"] = "Расчёт времён: алгоритм PrayTimes.org",
