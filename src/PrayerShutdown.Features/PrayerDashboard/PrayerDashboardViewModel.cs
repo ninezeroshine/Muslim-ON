@@ -7,6 +7,7 @@ using PrayerShutdown.Core.Domain.Enums;
 using PrayerShutdown.Core.Domain.Models;
 using PrayerShutdown.Core.Extensions;
 using PrayerShutdown.Core.Interfaces;
+using PrayerShutdown.Services.Update;
 
 namespace PrayerShutdown.Features.PrayerDashboard;
 
@@ -15,6 +16,7 @@ public partial class PrayerDashboardViewModel : ObservableObject
     private readonly IPrayerTimeCalculator _calculator;
     private readonly ISettingsRepository _settingsRepo;
     private readonly ISchedulerService _scheduler;
+    private readonly UpdateService _updateService;
     private bool _initialized;
 
     // ── Core ──
@@ -68,14 +70,23 @@ public partial class PrayerDashboardViewModel : ObservableObject
 
     partial void OnShowWisdomChanged(bool value) => ShowWisdomHint = !value;
 
+    // ── Auto-update ──
+    [ObservableProperty] private bool _updateAvailable;
+    [ObservableProperty] private string _updateVersion = "";
+    [ObservableProperty] private bool _isUpdating;
+    [ObservableProperty] private int _updatePercent;
+    private string? _updateDownloadUrl;
+
     public PrayerDashboardViewModel(
         IPrayerTimeCalculator calculator,
         ISettingsRepository settingsRepo,
-        ISchedulerService scheduler)
+        ISchedulerService scheduler,
+        UpdateService updateService)
     {
         _calculator = calculator;
         _settingsRepo = settingsRepo;
         _scheduler = scheduler;
+        _updateService = updateService;
     }
 
     // ═══════════════════════════════════════════
@@ -165,6 +176,7 @@ public partial class PrayerDashboardViewModel : ObservableObject
             if (!_initialized)
             {
                 await _scheduler.InitializeAsync();
+                _ = CheckForUpdateAsync(); // fire-and-forget, non-blocking
                 _initialized = true;
             }
 
@@ -302,6 +314,39 @@ public partial class PrayerDashboardViewModel : ObservableObject
     [RelayCommand] private void ExpandShutdownInfo()   { ShowShutdownInfo = true;  OnPropertyChanged(nameof(ShowShutdownHint)); }
     [RelayCommand] private void DismissWisdom()        { ShowWisdom = false; }
     [RelayCommand] private void ExpandWisdom()         { ShowWisdom = true; }
+
+    // ═══════════════════════════════════════════
+    //  Auto-update
+    // ═══════════════════════════════════════════
+
+    private async Task CheckForUpdateAsync()
+    {
+        var (version, url) = await _updateService.CheckForUpdateAsync();
+        if (version is not null && url is not null)
+        {
+            UpdateVersion = version;
+            _updateDownloadUrl = url;
+            UpdateAvailable = true;
+        }
+    }
+
+    [RelayCommand]
+    private async Task InstallUpdateAsync()
+    {
+        if (_updateDownloadUrl is null) return;
+        IsUpdating = true;
+        var progress = new Progress<int>(p => UpdatePercent = p);
+        var ok = await _updateService.DownloadAndApplyAsync(_updateDownloadUrl, progress);
+        if (ok)
+        {
+            // Script will restart the app — exit current instance
+            System.Diagnostics.Process.GetCurrentProcess().Kill();
+        }
+        else
+        {
+            IsUpdating = false;
+        }
+    }
 
     // ═══════════════════════════════════════════
     //  Helpers

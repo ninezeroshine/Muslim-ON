@@ -73,6 +73,39 @@
                         <TextBlock Text="{x:Bind ViewModel.FridayMessage, Mode=OneWay}" FontSize="12" FontWeight="Medium" Foreground="{ThemeResource GeistBlue700Brush}" />
                     </StackPanel>
                 </Border>
+                <!-- Update available banner -->
+                <Border CornerRadius="8" Padding="12,8" Margin="0,8,0,0"
+                        Visibility="{x:Bind ViewModel.UpdateAvailable, Mode=OneWay}"
+                        Background="{ThemeResource GeistBackground200Brush}"
+                        BorderBrush="{ThemeResource GeistGrayAlpha400Brush}" BorderThickness="1">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Grid.Column="0" Glyph="&#xE896;" FontSize="16"
+                                  Foreground="{ThemeResource GeistSuccessBrush}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind L_UpdateAvailable}" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{ThemeResource GeistGray1000Brush}" />
+                            <TextBlock FontSize="11" Foreground="{ThemeResource GeistGray700Brush}">
+                                <Run Text="v" /><Run Text="{x:Bind ViewModel.UpdateVersion, Mode=OneWay}" />
+                            </TextBlock>
+                        </StackPanel>
+                        <Button Grid.Column="2" Content="{x:Bind L_UpdateNow}"
+                                Style="{StaticResource GeistButtonPrimaryStyle}"
+                                Height="30" Padding="14,0" FontSize="12"
+                                Command="{x:Bind ViewModel.InstallUpdateCommand}"
+                                Visibility="{x:Bind ViewModel.IsUpdating, Mode=OneWay, Converter={StaticResource InvertBoolVis}}" />
+                        <ProgressBar Grid.Column="2" Width="80"
+                                     Visibility="{x:Bind ViewModel.IsUpdating, Mode=OneWay}"
+                                     Value="{x:Bind ViewModel.UpdatePercent, Mode=OneWay}"
+                                     Minimum="0" Maximum="100" Height="4" CornerRadius="2"
+                                     Foreground="{ThemeResource GeistSuccessBrush}"
+                                     VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
             </StackPanel>
 
             <!-- ═══ ROW 1: Countdown ═══ -->

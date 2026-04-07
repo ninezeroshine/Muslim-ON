@@ -24,6 +24,8 @@ public sealed partial class PrayerDashboardPage : Page
     public string L_GotIt => Loc.S("shutdown_got_it");
     public string L_Shutdown => Loc.S("shutdown_enabled");
     public string L_WisdomTitle => Loc.S("wisdom_title");
+    public string L_UpdateAvailable => Loc.S("update_available");
+    public string L_UpdateNow => Loc.S("update_now");
 
     private readonly DispatcherTimer _countdownTimer;
     private int _tickCount;

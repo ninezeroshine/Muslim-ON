@@ -157,6 +157,12 @@ public sealed class LocalizationService
         ["undo"] = "Undo",
         ["wisdom_title"] = "Daily Wisdom",
         ["jumuah_notice"] = "Today is Jumu'ah \u2014 don't forget the congregational prayer",
+
+        // Update
+        ["update_available"] = "Update available",
+        ["update_version"] = "Version {0} is ready to install",
+        ["update_now"] = "Update Now",
+        ["updating"] = "Updating\u2026",
     };
 
     // ════════════════════════════════════════════
@@ -276,6 +282,12 @@ public sealed class LocalizationService
         ["undo"] = "Отменить",
         ["wisdom_title"] = "Мудрость дня",
         ["jumuah_notice"] = "Сегодня Джума \u2014 не забудьте о коллективной молитве",
+
+        // Обновление
+        ["update_available"] = "Доступно обновление",
+        ["update_version"] = "Версия {0} готова к установке",
+        ["update_now"] = "Обновить",
+        ["updating"] = "Обновление\u2026",
     };
 }
 

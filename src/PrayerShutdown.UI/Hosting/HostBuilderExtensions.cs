@@ -11,6 +11,7 @@ using PrayerShutdown.Services.Notification;
 using PrayerShutdown.Services.Scheduling;
 using PrayerShutdown.Services.Shutdown;
 using PrayerShutdown.Services.Storage;
+using PrayerShutdown.Services.Update;
 using PrayerShutdown.UI.Navigation;
 
 namespace PrayerShutdown.UI.Hosting;
@@ -42,6 +43,7 @@ public static class HostBuilderExtensions
             services.AddTransient<IActionLogger, ActionLogger>();
             services.AddSingleton<INotificationService, ToastNotificationService>();
             services.AddSingleton<IAdhanPlayer, AdhanPlayer>();
+            services.AddSingleton<UpdateService>();
 
             // Scheduler — singleton, creates its own scoped dependencies via factory
             services.AddSingleton<ISchedulerService>(sp =>

@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PrayerShutdown.Core\PrayerShutdown.Core.csproj" />
     <ProjectReference Include="..\PrayerShutdown.Common\PrayerShutdown.Common.csproj" />
+    <ProjectReference Include="..\PrayerShutdown.Services\PrayerShutdown.Services.csproj" />
   </ItemGroup>
 
   <ItemGroup>
