@@ -217,7 +217,7 @@ public partial class PrayerDashboardViewModel : ObservableObject
             CountdownText = "00:00";
             NextPrayerName = "";
             AllPrayersPassed = true;
-            CountdownColor = "#8F8F8F";
+            CountdownColor = ColorTokens.Gray;
             ShowPrayerProgress = false;
             return;
         }
@@ -228,9 +228,9 @@ public partial class PrayerDashboardViewModel : ObservableObject
         NextPrayerName = nextCard.LocalizedName;
         CountdownColor = remaining.TotalMinutes switch
         {
-            < 10 => "#E5484D",
-            < 30 => "#F5A623",
-            _ => "#171717"
+            < 10 => ColorTokens.Error,
+            < 30 => ColorTokens.Warning,
+            _ => ColorTokens.Text
         };
 
         UpdateProgress(now, nextCard);

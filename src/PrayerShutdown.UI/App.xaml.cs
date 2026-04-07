@@ -10,7 +10,6 @@ namespace PrayerShutdown.UI;
 public partial class App : Application
 {
     private MainWindow? _mainWindow;
-    private TrayIconManager? _trayIcon;
 
     public IHost Host { get; }
 

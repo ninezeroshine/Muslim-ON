@@ -2,7 +2,7 @@
 ; Run: ISCC.exe setup.iss
 
 #define MyAppName "Muslim ON"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Muslim ON"
 #define MyAppExeName "PrayerShutdown.UI.exe"
 #define MyAppURL "https://github.com/muslimOn"

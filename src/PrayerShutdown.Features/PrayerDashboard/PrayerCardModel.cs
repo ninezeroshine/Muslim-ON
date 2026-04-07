@@ -41,19 +41,19 @@ public partial class PrayerCardModel : ObservableObject
         ShutdownEnabled ? $"\u26A1 {Loc.S("shutdown_at")} {Time.AddMinutes(ShutdownDelayMinutes):HH:mm}" : "";
 
     public string StatusColor =>
-        IsPrayed || CanUndo ? "#45A557" :
-        IsPassed ? "#45A557" :
-        IsNext ? "#0070F3" : "#8F8F8F";
+        IsPrayed || CanUndo ? ColorTokens.Success :
+        IsPassed ? ColorTokens.Success :
+        IsNext ? ColorTokens.Blue : ColorTokens.Gray;
 
     public double CardOpacity => IsPassed && !IsPrayed ? 0.55 : 1.0;
 
     public string AccentColor =>
-        IsPrayed || CanUndo ? "#45A557" :
-        IsPassed ? "#C9C9C9" :
-        IsNext ? "#0070F3" : "#E0E0E0";
+        IsPrayed || CanUndo ? ColorTokens.Success :
+        IsPassed ? ColorTokens.GrayLight :
+        IsNext ? ColorTokens.Blue : ColorTokens.GrayLighter;
 
     public int AccentWidth => IsPrayed || CanUndo || IsNext ? 4 : 3;
-    public string ShutdownIconColor => ShutdownEnabled ? "#E5484D" : "#C9C9C9";
+    public string ShutdownIconColor => ShutdownEnabled ? ColorTokens.Error : ColorTokens.GrayLight;
 
     [RelayCommand]
     private void ToggleShutdown()

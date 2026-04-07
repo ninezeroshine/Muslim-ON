@@ -23,7 +23,6 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     public PrayerTime? NextPrayer => TodaysPrayers?.GetNextPrayer(DateTime.Now);
 
     public event EventHandler<PrayerTime>? PrayerTimeApproaching;
-    public event EventHandler<PrayerTime>? PrayerTimeReached;
     public event EventHandler<PrayerTime>? ShutdownTriggered;
 
     public PrayerScheduler(

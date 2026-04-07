@@ -9,7 +9,6 @@ public interface ISchedulerService
     DailyPrayerTimes? TodaysPrayers { get; }
     PrayerTime? NextPrayer { get; }
     event EventHandler<PrayerTime>? PrayerTimeApproaching;
-    event EventHandler<PrayerTime>? PrayerTimeReached;
     event EventHandler<PrayerTime>? ShutdownTriggered;
     void MarkAsPrayed(PrayerTime prayer);
     void SnoozePrayer(PrayerTime prayer);
