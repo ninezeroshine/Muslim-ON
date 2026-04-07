@@ -1,0 +1,38 @@
+<Project>
+  <!--
+    Override all MrtCore.PriGen targets that depend on VS-only build DLLs.
+    Without the "Windows Application Development" VS workload,
+    Microsoft.Build.AppxPackage.dll and Microsoft.Build.Packaging.Pri.Tasks.dll
+    are absent. We replace every target that invokes those tasks with no-ops.
+    This is safe for unpackaged WinUI 3 apps built from CLI.
+  -->
+  <Target Name="_GetSdkToolPaths" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_GetSdkToolsPathsFromSdk" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_GetSdkToolsPathsFromPackage" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_GenerateProjectPriFile" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_GenerateProjectPriFileCore" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_GenerateProjectPriConfigurationFiles" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_GeneratePrisForPortableLibraries" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_CalculateInputsForGenerateProjectPriFileCore" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_CalculateXbfSupport" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_GetProjectArchitecture" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_GetRecursiveProjectArchitecture" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_GetPackageArchitecture" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_GetDefaultResourceLanguage" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_ExpandProjectPriFile" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_ExpandPriFiles" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_CreateProjectPriFileItem" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_GetPriFilesFromPayload" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_ComputeInputPriFiles" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_SetPortablePriProperties" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="_ValidateConfiguration" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="AddPriPayloadFilesToCopyToOutputDirectoryItems" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="GetMrtPackagingOutputs" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="GetOptionalProjectOutputs" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="GetCopyToOutputDirectoryItemsOutputGroup" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="OptionalProjectsOutputGroup" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="ComFilesOutputGroup" Condition="'$(UseWinUI)' == 'true'" />
+  <Target Name="CopyLocalFilesOutputGroup"
+          Condition="'$(UseWinUI)' == 'true'"
+          Returns="@(CopyLocalFilesOutputGroupOutput)" />
+</Project>

@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+        <!-- ═══════════════ LIGHT THEME ═══════════════ -->
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="GeistBackground100">#FFFFFF</Color>
+            <Color x:Key="GeistBackground200">#FAFAFA</Color>
+            <Color x:Key="GeistBackground300">#F5F5F5</Color>
+
+            <Color x:Key="GeistGray100">#F2F2F2</Color>
+            <Color x:Key="GeistGray200">#EBEBEB</Color>
+            <Color x:Key="GeistGray300">#E6E6E6</Color>
+            <Color x:Key="GeistGray400">#EBEBEB</Color>
+            <Color x:Key="GeistGray500">#E0E0E0</Color>
+            <Color x:Key="GeistGray600">#C9C9C9</Color>
+            <Color x:Key="GeistGray700">#8F8F8F</Color>
+            <Color x:Key="GeistGray800">#7D7D7D</Color>
+            <Color x:Key="GeistGray900">#666666</Color>
+            <Color x:Key="GeistGray1000">#171717</Color>
+
+            <Color x:Key="GeistGrayAlpha100">#08000000</Color>
+            <Color x:Key="GeistGrayAlpha200">#0F000000</Color>
+            <Color x:Key="GeistGrayAlpha400">#1A000000</Color>
+
+            <Color x:Key="GeistBlue100">#F0F7FF</Color>
+            <Color x:Key="GeistBlue200">#E0EFFF</Color>
+            <Color x:Key="GeistBlue500">#3B82F6</Color>
+            <Color x:Key="GeistBlue700">#0070F3</Color>
+            <Color x:Key="GeistBlue900">#003580</Color>
+
+            <Color x:Key="GeistError">#E5484D</Color>
+            <Color x:Key="GeistWarning">#F5A623</Color>
+            <Color x:Key="GeistSuccess">#45A557</Color>
+            <Color x:Key="GeistInfo">#0070F3</Color>
+
+            <!-- All Brushes -->
+            <SolidColorBrush x:Key="GeistBackground100Brush" Color="{ThemeResource GeistBackground100}" />
+            <SolidColorBrush x:Key="GeistBackground200Brush" Color="{ThemeResource GeistBackground200}" />
+            <SolidColorBrush x:Key="GeistBackground300Brush" Color="{ThemeResource GeistBackground300}" />
+            <SolidColorBrush x:Key="GeistGray100Brush" Color="{ThemeResource GeistGray100}" />
+            <SolidColorBrush x:Key="GeistGray200Brush" Color="{ThemeResource GeistGray200}" />
+            <SolidColorBrush x:Key="GeistGray300Brush" Color="{ThemeResource GeistGray300}" />
+            <SolidColorBrush x:Key="GeistGray400Brush" Color="{ThemeResource GeistGray400}" />
+            <SolidColorBrush x:Key="GeistGray500Brush" Color="{ThemeResource GeistGray500}" />
+            <SolidColorBrush x:Key="GeistGray600Brush" Color="{ThemeResource GeistGray600}" />
+            <SolidColorBrush x:Key="GeistGray700Brush" Color="{ThemeResource GeistGray700}" />
+            <SolidColorBrush x:Key="GeistGray800Brush" Color="{ThemeResource GeistGray800}" />
+            <SolidColorBrush x:Key="GeistGray900Brush" Color="{ThemeResource GeistGray900}" />
+            <SolidColorBrush x:Key="GeistGray1000Brush" Color="{ThemeResource GeistGray1000}" />
+            <SolidColorBrush x:Key="GeistBlue100Brush" Color="{ThemeResource GeistBlue100}" />
+            <SolidColorBrush x:Key="GeistBlue500Brush" Color="{ThemeResource GeistBlue500}" />
+            <SolidColorBrush x:Key="GeistBlue700Brush" Color="{ThemeResource GeistBlue700}" />
+            <SolidColorBrush x:Key="GeistErrorBrush" Color="{ThemeResource GeistError}" />
+            <SolidColorBrush x:Key="GeistWarningBrush" Color="{ThemeResource GeistWarning}" />
+            <SolidColorBrush x:Key="GeistSuccessBrush" Color="{ThemeResource GeistSuccess}" />
+            <SolidColorBrush x:Key="GeistGrayAlpha100Brush" Color="{ThemeResource GeistGrayAlpha100}" />
+            <SolidColorBrush x:Key="GeistGrayAlpha200Brush" Color="{ThemeResource GeistGrayAlpha200}" />
+            <SolidColorBrush x:Key="GeistGrayAlpha400Brush" Color="{ThemeResource GeistGrayAlpha400}" />
+            <SolidColorBrush x:Key="GeistFocusRingBrush" Color="#800070F3" />
+
+            <!-- Override system accent to enforce our design system regardless of Windows theme -->
+            <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="{ThemeResource GeistBlue700}" />
+            <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="Transparent" />
+
+            <!-- ToggleButton -->
+            <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="{ThemeResource GeistGray1000}" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="{ThemeResource GeistGray900}" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="{ThemeResource GeistGray800}" />
+            <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="{ThemeResource GeistBackground100}" />
+            <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="{ThemeResource GeistBackground100}" />
+            <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="{ThemeResource GeistBackground100}" />
+
+            <!-- ToggleSwitch -->
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="{ThemeResource GeistGray1000}" />
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="{ThemeResource GeistGray900}" />
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="{ThemeResource GeistGray800}" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="{ThemeResource GeistGray1000}" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="{ThemeResource GeistGray900}" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="{ThemeResource GeistGray800}" />
+
+            <!-- ComboBox / Selection -->
+            <SolidColorBrush x:Key="ComboBoxDropDownBackgroundPointerOver" Color="{ThemeResource GeistBackground300}" />
+
+            <!-- Accent override for any other system controls -->
+            <Color x:Key="SystemAccentColor">#0070F3</Color>
+            <Color x:Key="SystemAccentColorLight1">#3B82F6</Color>
+            <Color x:Key="SystemAccentColorLight2">#60A5FA</Color>
+            <Color x:Key="SystemAccentColorLight3">#93C5FD</Color>
+            <Color x:Key="SystemAccentColorDark1">#0059C1</Color>
+            <Color x:Key="SystemAccentColorDark2">#004494</Color>
+            <Color x:Key="SystemAccentColorDark3">#003068</Color>
+        </ResourceDictionary>
+
+        <!-- ═══════════════ DARK THEME ═══════════════ -->
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="GeistBackground100">#0A0A0A</Color>
+            <Color x:Key="GeistBackground200">#111111</Color>
+            <Color x:Key="GeistBackground300">#1A1A1A</Color>
+
+            <Color x:Key="GeistGray100">#1A1A1A</Color>
+            <Color x:Key="GeistGray200">#1F1F1F</Color>
+            <Color x:Key="GeistGray300">#292929</Color>
+            <Color x:Key="GeistGray400">#2E2E2E</Color>
+            <Color x:Key="GeistGray500">#454545</Color>
+            <Color x:Key="GeistGray600">#5E5E5E</Color>
+            <Color x:Key="GeistGray700">#6E6E6E</Color>
+            <Color x:Key="GeistGray800">#7C7C7C</Color>
+            <Color x:Key="GeistGray900">#A0A0A0</Color>
+            <Color x:Key="GeistGray1000">#EDEDED</Color>
+
+            <Color x:Key="GeistGrayAlpha100">#08FFFFFF</Color>
+            <Color x:Key="GeistGrayAlpha200">#0FFFFFFF</Color>
+            <Color x:Key="GeistGrayAlpha400">#1AFFFFFF</Color>
+
+            <Color x:Key="GeistBlue100">#0D1F3C</Color>
+            <Color x:Key="GeistBlue200">#0F2B52</Color>
+            <Color x:Key="GeistBlue500">#3B82F6</Color>
+            <Color x:Key="GeistBlue700">#0070F3</Color>
+            <Color x:Key="GeistBlue900">#70B8FF</Color>
+
+            <Color x:Key="GeistError">#E5484D</Color>
+            <Color x:Key="GeistWarning">#F5A623</Color>
+            <Color x:Key="GeistSuccess">#45A557</Color>
+            <Color x:Key="GeistInfo">#0070F3</Color>
+
+            <!-- All Brushes -->
+            <SolidColorBrush x:Key="GeistBackground100Brush" Color="{ThemeResource GeistBackground100}" />
+            <SolidColorBrush x:Key="GeistBackground200Brush" Color="{ThemeResource GeistBackground200}" />
+            <SolidColorBrush x:Key="GeistBackground300Brush" Color="{ThemeResource GeistBackground300}" />
+            <SolidColorBrush x:Key="GeistGray100Brush" Color="{ThemeResource GeistGray100}" />
+            <SolidColorBrush x:Key="GeistGray200Brush" Color="{ThemeResource GeistGray200}" />
+            <SolidColorBrush x:Key="GeistGray300Brush" Color="{ThemeResource GeistGray300}" />
+            <SolidColorBrush x:Key="GeistGray400Brush" Color="{ThemeResource GeistGray400}" />
+            <SolidColorBrush x:Key="GeistGray500Brush" Color="{ThemeResource GeistGray500}" />
+            <SolidColorBrush x:Key="GeistGray600Brush" Color="{ThemeResource GeistGray600}" />
+            <SolidColorBrush x:Key="GeistGray700Brush" Color="{ThemeResource GeistGray700}" />
+            <SolidColorBrush x:Key="GeistGray800Brush" Color="{ThemeResource GeistGray800}" />
+            <SolidColorBrush x:Key="GeistGray900Brush" Color="{ThemeResource GeistGray900}" />
+            <SolidColorBrush x:Key="GeistGray1000Brush" Color="{ThemeResource GeistGray1000}" />
+            <SolidColorBrush x:Key="GeistBlue100Brush" Color="{ThemeResource GeistBlue100}" />
+            <SolidColorBrush x:Key="GeistBlue500Brush" Color="{ThemeResource GeistBlue500}" />
+            <SolidColorBrush x:Key="GeistBlue700Brush" Color="{ThemeResource GeistBlue700}" />
+            <SolidColorBrush x:Key="GeistErrorBrush" Color="{ThemeResource GeistError}" />
+            <SolidColorBrush x:Key="GeistWarningBrush" Color="{ThemeResource GeistWarning}" />
+            <SolidColorBrush x:Key="GeistSuccessBrush" Color="{ThemeResource GeistSuccess}" />
+            <SolidColorBrush x:Key="GeistGrayAlpha100Brush" Color="{ThemeResource GeistGrayAlpha100}" />
+            <SolidColorBrush x:Key="GeistGrayAlpha200Brush" Color="{ThemeResource GeistGrayAlpha200}" />
+            <SolidColorBrush x:Key="GeistGrayAlpha400Brush" Color="{ThemeResource GeistGrayAlpha400}" />
+            <SolidColorBrush x:Key="GeistFocusRingBrush" Color="#800070F3" />
+
+            <!-- Override system accent for dark theme -->
+            <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="{ThemeResource GeistBlue700}" />
+            <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="Transparent" />
+
+            <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="{ThemeResource GeistGray1000}" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="{ThemeResource GeistGray900}" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="{ThemeResource GeistGray800}" />
+            <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="{ThemeResource GeistBackground100}" />
+            <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="{ThemeResource GeistBackground100}" />
+            <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="{ThemeResource GeistBackground100}" />
+
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="{ThemeResource GeistGray1000}" />
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="{ThemeResource GeistGray900}" />
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="{ThemeResource GeistGray800}" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="{ThemeResource GeistGray1000}" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPointerOver" Color="{ThemeResource GeistGray900}" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOnPressed" Color="{ThemeResource GeistGray800}" />
+
+            <SolidColorBrush x:Key="ComboBoxDropDownBackgroundPointerOver" Color="{ThemeResource GeistBackground300}" />
+
+            <Color x:Key="SystemAccentColor">#0070F3</Color>
+            <Color x:Key="SystemAccentColorLight1">#3B82F6</Color>
+            <Color x:Key="SystemAccentColorLight2">#60A5FA</Color>
+            <Color x:Key="SystemAccentColorLight3">#93C5FD</Color>
+            <Color x:Key="SystemAccentColorDark1">#0059C1</Color>
+            <Color x:Key="SystemAccentColorDark2">#004494</Color>
+            <Color x:Key="SystemAccentColorDark3">#003068</Color>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

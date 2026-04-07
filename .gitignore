@@ -1,0 +1,58 @@
+## .NET
+bin/
+obj/
+publish/
+dist/
+
+## Claude
+.claude/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.vs/
+.vs/
+
+## NuGet
+packages/
+*.nupkg
+project.lock.json
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Windows App SDK / WinUI
+Generated Files/
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+*.msixupload
+
+## IDE
+.idea/
+*.resharper
+_ReSharper*/
+
+## OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+## Secrets
+*.pfx
+*.snk
+appsettings.*.json
+!appsettings.json
+MuslimON_v1.0_x64.zip
+priconfig.xml
