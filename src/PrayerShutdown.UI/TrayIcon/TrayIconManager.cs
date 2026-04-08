@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using PrayerShutdown.Common.Localization;
 using PrayerShutdown.Core.Extensions;
 using PrayerShutdown.Core.Interfaces;
+using PrayerShutdown.Services.Update;
 
 namespace PrayerShutdown.UI.TrayIcon;
 
@@ -88,11 +89,11 @@ public sealed class TrayIconManager : IDisposable
     {
         if (_trayIcon is null) return;
         var next = _scheduler.NextPrayer;
-        if (next is null) { _trayIcon.ToolTipText = "Muslim ON"; return; }
+        if (next is null) { _trayIcon.ToolTipText = $"Muslim ON v{UpdateService.CurrentVersion}"; return; }
 
         var remaining = next.Time.TimeUntil().ToCountdownString();
         var name = Loc.S($"prayer_{next.Name.ToString().ToLowerInvariant()}");
-        _trayIcon.ToolTipText = $"Muslim ON — {name} {Loc.S("until")} {remaining}";
+        _trayIcon.ToolTipText = $"Muslim ON v{UpdateService.CurrentVersion} — {name} {Loc.S("until")} {remaining}";
     }
 
     public void ShowWindow() => _mainWindow?.Activate();
