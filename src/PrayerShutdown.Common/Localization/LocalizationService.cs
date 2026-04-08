@@ -134,7 +134,7 @@ public sealed class LocalizationService
 
         // About
         ["about_title"] = "Muslim ON",
-        ["about_version"] = "Version 1.1.1",
+        ["about_version"] = "Version 1.2.0",
         ["about_desc"] = "Automatic prayer time reminders with optional PC shutdown. Helps you maintain your daily prayers.",
         ["about_tech"] = "Built with WinUI 3 + .NET 8",
         ["about_algorithm"] = "Prayer times: PrayTimes.org algorithm",
@@ -179,9 +179,24 @@ public sealed class LocalizationService
 
         // Shutdown popups
         ["prayer_approaching_title"] = "Prayer Time Approaching",
-        ["prayer_approaching_desc"] = "It's almost time for prayer. If shutdown is enabled and you don't respond, your PC will shut down after the prayer time.",
+        ["prayer_approaching_desc"] = "It's almost time for prayer. Get ready!",
+        ["ill_pray_soon"] = "I'll pray soon",
+
+        // Phase 2: Prayer time arrived
+        ["prayer_arrived_title"] = "Time to Pray!",
+        ["prayer_arrived_desc"] = "It's time for {0}. Go pray now!",
+        ["going_to_pray"] = "Going to pray",
+
+        // Phase 3: Nudges
+        ["prayer_nudge_title"] = "Prayer Reminder",
+        ["prayer_nudge_desc"] = "You still haven't prayed {0}.",
+        ["snoozes_left"] = "{0} snooze(s) left",
+        ["snooze"] = "Snooze {0} min",
+        ["final_warning"] = "Last chance! No more snoozes.",
+
+        // Phase 4: Shutdown
         ["shutdown_warning_title"] = "PC Shutting Down!",
-        ["shutdown_warning_desc"] = "You didn't respond to the prayer reminder. Your PC will shut down in 60 seconds. Click a button to cancel.",
+        ["shutdown_warning_desc"] = "You didn't pray. Your PC will shut down in {0} seconds.",
         ["cancel_shutdown"] = "Cancel Shutdown",
 
         // Tray menu
@@ -283,7 +298,7 @@ public sealed class LocalizationService
 
         // О приложении
         ["about_title"] = "Muslim ON",
-        ["about_version"] = "Версия 1.1.1",
+        ["about_version"] = "Версия 1.2.0",
         ["about_desc"] = "Автоматические напоминания о намазе с возможностью выключения ПК. Помогает соблюдать ежедневные молитвы.",
         ["about_tech"] = "Создано на WinUI 3 + .NET 8",
         ["about_algorithm"] = "Расчёт времён: алгоритм PrayTimes.org",
@@ -328,9 +343,24 @@ public sealed class LocalizationService
 
         // Попапы выключения
         ["prayer_approaching_title"] = "Приближается время намаза",
-        ["prayer_approaching_desc"] = "Скоро время молитвы. Если включено выключение и вы не ответите, ПК выключится после наступления времени намаза.",
+        ["prayer_approaching_desc"] = "Скоро время молитвы. Приготовьтесь!",
+        ["ill_pray_soon"] = "Скоро помолюсь",
+
+        // Фаза 2: Время намаза наступило
+        ["prayer_arrived_title"] = "Время молитвы!",
+        ["prayer_arrived_desc"] = "Наступило время {0}. Идите молиться!",
+        ["going_to_pray"] = "Иду молиться",
+
+        // Фаза 3: Напоминания
+        ["prayer_nudge_title"] = "Напоминание о намазе",
+        ["prayer_nudge_desc"] = "Вы ещё не совершили {0}.",
+        ["snoozes_left"] = "Осталось отложений: {0}",
+        ["snooze"] = "Отложить {0} мин",
+        ["final_warning"] = "Последний шанс! Больше нельзя откладывать.",
+
+        // Фаза 4: Выключение
         ["shutdown_warning_title"] = "ПК выключается!",
-        ["shutdown_warning_desc"] = "Вы не ответили на напоминание о намазе. ПК выключится через 60 секунд. Нажмите кнопку, чтобы отменить.",
+        ["shutdown_warning_desc"] = "Вы не помолились. ПК выключится через {0} секунд.",
         ["cancel_shutdown"] = "Отменить выключение",
 
         // Меню в трее

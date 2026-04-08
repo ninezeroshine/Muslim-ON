@@ -10,6 +10,8 @@ public static class Constants
     public const int DefaultShutdownDelayMinutes = 15;
     public const int MaxSnoozeCount = 3;
     public const int SnoozeMinutes = 5;
+    public const int NudgeIntervalMinutes = 5;
+    public const int ShutdownCountdownSeconds = 60;
 
     public static string AppDataPath =>
         Path.Combine(

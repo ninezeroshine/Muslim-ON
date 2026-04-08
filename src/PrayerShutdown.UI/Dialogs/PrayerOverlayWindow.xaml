@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="PrayerShutdown.UI.Dialogs.PrayerOverlayWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.MergedDictionaries>
+                    <ResourceDictionary Source="ms-appx:///Theme/Generic.xaml" />
+                </ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary>
+        </Grid.Resources>
+
+        <!-- Semi-transparent backdrop -->
+        <Border Background="{ThemeResource GeistGrayAlpha400Brush}"
+                Visibility="{x:Bind IsFullOverlay, Mode=OneWay}" />
+
+        <!-- Central card -->
+        <Border x:Name="CardBorder"
+                Background="{ThemeResource GeistBackground100Brush}"
+                CornerRadius="16"
+                Padding="32"
+                MaxWidth="440"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                BorderBrush="{ThemeResource GeistGray300Brush}"
+                BorderThickness="1">
+
+            <Border.Shadow>
+                <ThemeShadow />
+            </Border.Shadow>
+
+            <StackPanel Spacing="20">
+                <!-- Phase icon -->
+                <TextBlock x:Name="PhaseIcon"
+                           FontSize="48"
+                           HorizontalAlignment="Center"
+                           Text="&#x1F54C;" />
+
+                <!-- Title -->
+                <TextBlock x:Name="TitleText"
+                           Style="{StaticResource HeadingStyle3}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center" />
+
+                <!-- Description -->
+                <TextBlock x:Name="DescriptionText"
+                           Style="{StaticResource BodyStyle}"
+                           Foreground="{ThemeResource GeistGray700Brush}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="WrapWholeWords" />
+
+                <!-- Prayer info -->
+                <Border Background="{ThemeResource GeistBackground300Brush}"
+                        CornerRadius="12"
+                        Padding="16,12">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel>
+                            <TextBlock x:Name="PrayerNameText"
+                                       Style="{StaticResource LabelStyle}"
+                                       FontWeight="SemiBold" />
+                            <TextBlock x:Name="PrayerTimeText"
+                                       Style="{StaticResource MonoStyle}"
+                                       Foreground="{ThemeResource GeistGray700Brush}"
+                                       FontSize="14" />
+                        </StackPanel>
+                        <TextBlock x:Name="CountdownText"
+                                   Grid.Column="1"
+                                   Style="{StaticResource MonoStyle}"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{ThemeResource GeistBlue700Brush}" />
+                    </Grid>
+                </Border>
+
+                <!-- Snooze info (Phase 3 only) -->
+                <TextBlock x:Name="SnoozeInfoText"
+                           Style="{StaticResource BodyStyle}"
+                           Foreground="{ThemeResource GeistWarningBrush}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           Visibility="Collapsed" />
+
+                <!-- Buttons -->
+                <StackPanel x:Name="ButtonPanel" Spacing="8">
+                    <!-- Primary action: I Prayed -->
+                    <Button x:Name="PrayedButton"
+                            Content="I Prayed"
+                            HorizontalAlignment="Stretch"
+                            Height="44"
+                            Style="{StaticResource GeistPrimaryButtonStyle}"
+                            Click="OnPrayedClicked" />
+
+                    <!-- Secondary action: varies by phase -->
+                    <Button x:Name="SecondaryButton"
+                            HorizontalAlignment="Stretch"
+                            Height="44"
+                            Style="{StaticResource GeistSecondaryButtonStyle}"
+                            Click="OnSecondaryClicked" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -14,16 +14,27 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     private readonly INotificationService _notificationService;
     private readonly ILogger<PrayerScheduler> _logger;
 
+    // Phase 1: reminder timers (X min before prayer)
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _reminderTimers = new();
+    // Phase 2: prayer time arrived timers
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _prayerTimeTimers = new();
+    // Phase 3: nudge timers (escalating after prayer)
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _nudgeTimers = new();
+    // Phase 4: shutdown timers
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _shutdownTimers = new();
+
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, int> _snoozeCounts = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, bool> _prayedToday = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, bool> _waitingForPrayer = new();
     private Timer? _midnightTimer;
 
     public DailyPrayerTimes? TodaysPrayers { get; private set; }
     public PrayerTime? NextPrayer => TodaysPrayers?.GetNextPrayer(DateTime.Now);
 
+    // Phase events
     public event EventHandler<PrayerTime>? PrayerTimeApproaching;
+    public event EventHandler<PrayerTime>? PrayerTimeArrived;
+    public event EventHandler<PrayerNudgeEventArgs>? PrayerNudge;
     public event EventHandler<PrayerTime>? ShutdownTriggered;
 
     public PrayerScheduler(
@@ -52,12 +63,19 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     public void MarkAsPrayed(PrayerTime prayer)
     {
         _logger.LogInformation("Prayer marked as prayed: {Prayer}", prayer.Name);
-        _prayedToday.TryAdd(prayer.Name, true);
-        CancelTimerFor(prayer.Name);
+        _prayedToday[prayer.Name] = true;
+        _waitingForPrayer.TryRemove(prayer.Name, out _);
+        CancelAllTimersFor(prayer.Name);
 
-        // Cancel pending shutdown if active
         if (_shutdownService.HasPendingShutdown)
             _shutdownService.CancelPendingShutdown();
+    }
+
+    public void SetWaitingForPrayer(PrayerTime prayer)
+    {
+        _logger.LogInformation("User going to pray: {Prayer}", prayer.Name);
+        _waitingForPrayer[prayer.Name] = true;
+        // Don't cancel nudge/shutdown timers — user might not come back
     }
 
     public void SnoozePrayer(PrayerTime prayer)
@@ -65,23 +83,30 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         _snoozeCounts.TryGetValue(prayer.Name, out int count);
         if (count >= Constants.MaxSnoozeCount)
         {
-            _logger.LogWarning("Max snooze count reached for {Prayer}", prayer.Name);
+            _logger.LogWarning("Max snooze count reached for {Prayer}, triggering shutdown", prayer.Name);
+            OnShutdownTriggered(prayer);
             return;
         }
 
         _snoozeCounts[prayer.Name] = count + 1;
         _logger.LogInformation("Snoozed {Prayer} ({Count}/{Max})", prayer.Name, count + 1, Constants.MaxSnoozeCount);
 
-        // Cancel pending shutdown
         if (_shutdownService.HasPendingShutdown)
             _shutdownService.CancelPendingShutdown();
 
-        // Reschedule shutdown timer
-        var delay = TimeSpan.FromMinutes(Constants.SnoozeMinutes);
-        if (_shutdownTimers.TryGetValue(prayer.Name, out var old)) old?.Dispose();
+        // Reschedule next nudge
+        DisposeTimer(_nudgeTimers, prayer.Name);
+        var delay = TimeSpan.FromMinutes(Constants.NudgeIntervalMinutes);
+        _nudgeTimers[prayer.Name] = new Timer(
+            _ => OnPrayerNudge(prayer, count + 2), // next nudge number (1-indexed, count+1 already happened)
+            null, delay, Timeout.InfiniteTimeSpan);
+
+        // Also reschedule shutdown after the nudge interval
+        DisposeTimer(_shutdownTimers, prayer.Name);
+        var shutdownDelay = TimeSpan.FromMinutes(Constants.NudgeIntervalMinutes * 2);
         _shutdownTimers[prayer.Name] = new Timer(
             _ => OnShutdownTriggered(prayer),
-            null, delay, Timeout.InfiniteTimeSpan);
+            null, shutdownDelay, Timeout.InfiniteTimeSpan);
     }
 
     private async Task RecalculateAsync()
@@ -91,6 +116,7 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
             CancelAllTimers();
             _prayedToday.Clear();
             _snoozeCounts.Clear();
+            _waitingForPrayer.Clear();
 
             var settings = await _settingsRepo.LoadAsync();
             var location = settings.Location.SelectedLocation;
@@ -123,7 +149,7 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     {
         var now = DateTime.Now;
 
-        // Reminder: X minutes before prayer
+        // Phase 1: Reminder (X minutes before prayer)
         var reminderTime = prayer.Time.AddMinutes(-rule.ReminderMinutesBefore);
         if (reminderTime > now)
         {
@@ -131,10 +157,31 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
             _reminderTimers[prayer.Name] = new Timer(
                 _ => OnPrayerApproaching(prayer, rule.ReminderMinutesBefore),
                 null, delay, Timeout.InfiniteTimeSpan);
-            _logger.LogDebug("Reminder for {Prayer} in {Delay}", prayer.Name, delay);
+            _logger.LogDebug("Phase 1 (Reminder) for {Prayer} in {Delay}", prayer.Name, delay);
         }
 
-        // Shutdown: X minutes after prayer
+        // Phase 2: Prayer time arrived
+        if (prayer.Time > now)
+        {
+            var delay = prayer.Time - now;
+            _prayerTimeTimers[prayer.Name] = new Timer(
+                _ => OnPrayerTimeArrived(prayer),
+                null, delay, Timeout.InfiniteTimeSpan);
+            _logger.LogDebug("Phase 2 (PrayNow) for {Prayer} in {Delay}", prayer.Name, delay);
+        }
+
+        // Phase 3: First nudge (5 min after prayer)
+        var firstNudgeTime = prayer.Time.AddMinutes(Constants.NudgeIntervalMinutes);
+        if (firstNudgeTime > now)
+        {
+            var delay = firstNudgeTime - now;
+            _nudgeTimers[prayer.Name] = new Timer(
+                _ => OnPrayerNudge(prayer, 1),
+                null, delay, Timeout.InfiniteTimeSpan);
+            _logger.LogDebug("Phase 3 (Nudge #1) for {Prayer} in {Delay}", prayer.Name, delay);
+        }
+
+        // Phase 4: Shutdown (ShutdownMinutesAfter after prayer)
         var shutdownTime = prayer.Time.AddMinutes(rule.ShutdownMinutesAfter);
         if (shutdownTime > now)
         {
@@ -142,31 +189,52 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
             _shutdownTimers[prayer.Name] = new Timer(
                 _ => OnShutdownTriggered(prayer),
                 null, delay, Timeout.InfiniteTimeSpan);
-            _logger.LogDebug("Shutdown for {Prayer} in {Delay}", prayer.Name, delay);
+            _logger.LogDebug("Phase 4 (Shutdown) for {Prayer} in {Delay}", prayer.Name, delay);
         }
     }
 
+    // ── Phase 1: Gentle Reminder ──
     private void OnPrayerApproaching(PrayerTime prayer, int minutesBefore)
     {
         if (_prayedToday.ContainsKey(prayer.Name)) return;
-        _logger.LogInformation("Prayer approaching: {Prayer} in {Min} min", prayer.Name, minutesBefore);
+        _logger.LogInformation("Phase 1 — Prayer approaching: {Prayer} in {Min} min", prayer.Name, minutesBefore);
 
-        // Fire event for UI popup
         PrayerTimeApproaching?.Invoke(this, prayer);
-
-        // Also send notification
         _ = _notificationService.ShowPrayerReminderAsync(prayer, minutesBefore);
     }
 
+    // ── Phase 2: Prayer Time Arrived ──
+    private void OnPrayerTimeArrived(PrayerTime prayer)
+    {
+        if (_prayedToday.ContainsKey(prayer.Name)) return;
+        _logger.LogInformation("Phase 2 — Prayer time arrived: {Prayer}", prayer.Name);
+
+        PrayerTimeArrived?.Invoke(this, prayer);
+    }
+
+    // ── Phase 3: Escalating Nudge ──
+    private void OnPrayerNudge(PrayerTime prayer, int nudgeNumber)
+    {
+        if (_prayedToday.ContainsKey(prayer.Name)) return;
+
+        var maxNudges = Constants.MaxSnoozeCount;
+        _logger.LogWarning("Phase 3 — Nudge #{Number}/{Max} for {Prayer}", nudgeNumber, maxNudges, prayer.Name);
+
+        PrayerNudge?.Invoke(this, new PrayerNudgeEventArgs
+        {
+            Prayer = prayer,
+            NudgeNumber = nudgeNumber,
+            MaxNudges = maxNudges,
+        });
+    }
+
+    // ── Phase 4: Shutdown ──
     private void OnShutdownTriggered(PrayerTime prayer)
     {
         if (_prayedToday.ContainsKey(prayer.Name)) return;
-        _logger.LogWarning("SHUTDOWN TRIGGERED for: {Prayer}", prayer.Name);
+        _logger.LogWarning("Phase 4 — SHUTDOWN TRIGGERED for: {Prayer}", prayer.Name);
 
-        // Fire event for UI (popup with cancel option)
         ShutdownTriggered?.Invoke(this, prayer);
-
-        // Execute actual shutdown
         _shutdownService.ExecuteShutdown();
     }
 
@@ -185,18 +253,33 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         }, null, delay, Timeout.InfiniteTimeSpan);
     }
 
-    private void CancelTimerFor(PrayerName name)
+    private static void DisposeTimer(
+        System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> dict,
+        PrayerName name)
     {
-        if (_reminderTimers.TryRemove(name, out var rt)) rt?.Dispose();
-        if (_shutdownTimers.TryRemove(name, out var st)) st?.Dispose();
+        if (dict.TryRemove(name, out var timer)) timer?.Dispose();
+    }
+
+    private void CancelAllTimersFor(PrayerName name)
+    {
+        DisposeTimer(_reminderTimers, name);
+        DisposeTimer(_prayerTimeTimers, name);
+        DisposeTimer(_nudgeTimers, name);
+        DisposeTimer(_shutdownTimers, name);
     }
 
     private void CancelAllTimers()
     {
-        foreach (var t in _reminderTimers.Values) t?.Dispose();
-        foreach (var t in _shutdownTimers.Values) t?.Dispose();
-        _reminderTimers.Clear();
-        _shutdownTimers.Clear();
+        DisposeAll(_reminderTimers);
+        DisposeAll(_prayerTimeTimers);
+        DisposeAll(_nudgeTimers);
+        DisposeAll(_shutdownTimers);
+    }
+
+    private static void DisposeAll(System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> dict)
+    {
+        foreach (var t in dict.Values) t?.Dispose();
+        dict.Clear();
     }
 
     public void Dispose()
