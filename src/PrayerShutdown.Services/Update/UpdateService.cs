@@ -30,7 +30,7 @@ public sealed class UpdateService
         _logger = logger;
     }
 
-    public static string CurrentVersion => "1.2.2";
+    public static string CurrentVersion => "1.2.3";
 
     /// <summary>
     /// Check GitHub Releases for a newer version.
@@ -75,7 +75,9 @@ public sealed class UpdateService
     {
         try
         {
-            var appDir = AppContext.BaseDirectory;
+            // Strip trailing backslash — "Muslim ON\" in batch causes \" to be parsed
+            // as an escaped quote, silently breaking xcopy/robocopy paths
+            var appDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var tempDir = Path.Combine(Path.GetTempPath(), "MuslimON_Update");
             var zipPath = Path.Combine(Path.GetTempPath(), "MuslimON_Update.zip");
 
@@ -142,12 +144,12 @@ public sealed class UpdateService
                     goto launch
                 )
                 echo [%date% %time%] Copying files to {appDir}... >> %LOG%
-                xcopy /s /y /q "{tempDir}\*" "{appDir}" >> %LOG% 2>&1
+                xcopy /s /y /q /i "{tempDir}\*" "{appDir}" >> %LOG% 2>&1
                 echo [%date% %time%] xcopy exit code: %errorlevel% >> %LOG%
                 if errorlevel 1 (
                     echo [%date% %time%] Copy failed, retrying in 3s... >> %LOG%
                     timeout /t 3 /nobreak >nul
-                    xcopy /s /y /q "{tempDir}\*" "{appDir}" >> %LOG% 2>&1
+                    xcopy /s /y /q /i "{tempDir}\*" "{appDir}" >> %LOG% 2>&1
                     echo [%date% %time%] xcopy retry exit code: %errorlevel% >> %LOG%
                 )
                 :launch
