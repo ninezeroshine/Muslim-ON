@@ -30,7 +30,7 @@ public sealed class UpdateService
         _logger = logger;
     }
 
-    public static string CurrentVersion => "1.2.1";
+    public static string CurrentVersion => "1.2.2";
 
     /// <summary>
     /// Check GitHub Releases for a newer version.
@@ -108,34 +108,55 @@ public sealed class UpdateService
             fileStream.Close();
             progress?.Report(90);
 
-            // Write updater script that waits for app to ACTUALLY exit, then copies files
+            // Write updater script with full diagnostic logging
             var scriptPath = Path.Combine(Path.GetTempPath(), "MuslimON_Update.bat");
+            var logPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                "MuslimON_Update.log");
             var exeName = Path.GetFileName(Environment.ProcessPath ?? "PrayerShutdown.UI.exe");
             var pid = Environment.ProcessId;
+            var targetExe = Path.Combine(appDir, exeName);
             var script = $"""
                 @echo off
-                echo Updating Muslim ON...
-                echo Waiting for app to exit (PID {pid})...
+                set LOG="{logPath}"
+                echo [%date% %time%] Update started > %LOG%
+                echo [%date% %time%] PID={pid} appDir={appDir} >> %LOG%
+                echo [%date% %time%] zipPath={zipPath} >> %LOG%
+                echo [%date% %time%] tempDir={tempDir} >> %LOG%
+                echo [%date% %time%] Waiting for process {pid} to exit... >> %LOG%
                 :waitloop
                 tasklist /fi "PID eq {pid}" 2>nul | find "{pid}" >nul
                 if not errorlevel 1 (
                     timeout /t 1 /nobreak >nul
                     goto waitloop
                 )
-                echo App exited. Extracting update...
-                timeout /t 1 /nobreak >nul
-                powershell -NoProfile -Command "Expand-Archive -Path '{zipPath}' -DestinationPath '{tempDir}' -Force"
-                echo Copying files...
-                xcopy /s /y /q "{tempDir}\*" "{appDir}"
-                if errorlevel 1 (
-                    echo Copy failed, retrying...
-                    timeout /t 3 /nobreak >nul
-                    xcopy /s /y /q "{tempDir}\*" "{appDir}"
+                echo [%date% %time%] Process exited >> %LOG%
+                timeout /t 2 /nobreak >nul
+                echo [%date% %time%] Extracting ZIP... >> %LOG%
+                powershell -NoProfile -Command "Expand-Archive -Path '{zipPath}' -DestinationPath '{tempDir}' -Force" >> %LOG% 2>&1
+                echo [%date% %time%] Expand-Archive exit code: %errorlevel% >> %LOG%
+                if not exist "{tempDir}\{exeName}" (
+                    echo [%date% %time%] ERROR: {exeName} not found in temp dir after extraction! >> %LOG%
+                    echo [%date% %time%] Temp dir contents: >> %LOG%
+                    dir "{tempDir}" >> %LOG% 2>&1
+                    goto launch
                 )
-                rmdir /s /q "{tempDir}"
-                del "{zipPath}"
-                echo Starting updated app...
-                start "" "{Path.Combine(appDir, exeName)}"
+                echo [%date% %time%] Copying files to {appDir}... >> %LOG%
+                xcopy /s /y /q "{tempDir}\*" "{appDir}" >> %LOG% 2>&1
+                echo [%date% %time%] xcopy exit code: %errorlevel% >> %LOG%
+                if errorlevel 1 (
+                    echo [%date% %time%] Copy failed, retrying in 3s... >> %LOG%
+                    timeout /t 3 /nobreak >nul
+                    xcopy /s /y /q "{tempDir}\*" "{appDir}" >> %LOG% 2>&1
+                    echo [%date% %time%] xcopy retry exit code: %errorlevel% >> %LOG%
+                )
+                :launch
+                echo [%date% %time%] Cleaning up temp... >> %LOG%
+                rmdir /s /q "{tempDir}" 2>nul
+                del "{zipPath}" 2>nul
+                echo [%date% %time%] Starting {targetExe} >> %LOG%
+                start "" "{targetExe}"
+                echo [%date% %time%] Done >> %LOG%
                 del "%~f0"
                 """;
 
