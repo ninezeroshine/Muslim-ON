@@ -30,6 +30,7 @@ public partial class App : Application
     {
         InitializeComponent();
         UnhandledException += OnUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
 
         Host = Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
             .ConfigurePrayerShutdownServices()
@@ -116,7 +117,13 @@ public partial class App : Application
                 _activePrayer = prayer;
                 ShowOverlay(OverlayPhase.Shutdown, prayer);
             }
-            catch (Exception ex) { WriteLog("Phase4_Shutdown", ex); }
+            catch (Exception ex)
+            {
+                WriteLog("Phase4_Shutdown", ex);
+                // Overlay failed — execute shutdown as fallback so the feature still works
+                var shutdownService = Services.GetRequiredService<IShutdownService>();
+                shutdownService.ExecuteShutdown();
+            }
         });
     }
 
@@ -178,7 +185,13 @@ public partial class App : Application
         CloseOverlay();
     }
 
-    private void OnOverlay_ShutdownFinished(object? sender, EventArgs e) => CloseOverlay();
+    private void OnOverlay_ShutdownFinished(object? sender, EventArgs e)
+    {
+        CloseOverlay();
+        // Shutdown execution moved here from PrayerScheduler to ensure overlay shows first
+        var shutdownService = Services.GetRequiredService<IShutdownService>();
+        shutdownService.ExecuteShutdown();
+    }
 
     // ── Crash logging ──
 
@@ -186,6 +199,12 @@ public partial class App : Application
     {
         e.Handled = true;
         WriteLog("UnhandledException", e.Exception);
+    }
+
+    private static void OnDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
+    {
+        if (e.ExceptionObject is Exception ex)
+            WriteLog("AppDomain.UnhandledException", ex);
     }
 
     private static void WriteLog(string context, Exception ex)

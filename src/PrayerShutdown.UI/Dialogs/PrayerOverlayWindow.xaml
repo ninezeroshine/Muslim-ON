@@ -27,12 +27,7 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 BorderBrush="{ThemeResource GeistGray300Brush}"
-                BorderThickness="1"
-                Translation="0,0,16">
-
-            <Border.Shadow>
-                <ThemeShadow />
-            </Border.Shadow>
+                BorderThickness="1">
 
             <StackPanel Spacing="20">
                 <!-- Phase icon -->

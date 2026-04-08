@@ -30,7 +30,7 @@ public sealed class UpdateService
         _logger = logger;
     }
 
-    public static string CurrentVersion => "1.2.5";
+    public static string CurrentVersion => "1.2.6";
 
     /// <summary>
     /// Check GitHub Releases for a newer version.
@@ -110,66 +110,78 @@ public sealed class UpdateService
             fileStream.Close();
             progress?.Report(90);
 
-            // Write updater script with full diagnostic logging
-            var scriptPath = Path.Combine(Path.GetTempPath(), "MuslimON_Update.bat");
-            var logPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                "MuslimON_Update.log");
+            // Write PowerShell updater script (replaces batch+xcopy which failed with exit code 4)
+            var scriptPath = Path.Combine(Path.GetTempPath(), "MuslimON_Update.ps1");
+            var logDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "MuslimON", "logs");
+            var logPath = Path.Combine(logDir, "update.log");
             var exeName = Path.GetFileName(Environment.ProcessPath ?? "PrayerShutdown.UI.exe");
             var pid = Environment.ProcessId;
             var targetExe = Path.Combine(appDir, exeName);
-            var script = $"""
-                @echo off
-                set LOG="{logPath}"
-                echo [%date% %time%] Update started > %LOG%
-                echo [%date% %time%] PID={pid} appDir={appDir} >> %LOG%
-                echo [%date% %time%] zipPath={zipPath} >> %LOG%
-                echo [%date% %time%] tempDir={tempDir} >> %LOG%
-                echo [%date% %time%] Waiting for process {pid} to exit... >> %LOG%
-                :waitloop
-                tasklist /fi "PID eq {pid}" 2>nul | find "{pid}" >nul
-                if not errorlevel 1 (
-                    timeout /t 1 /nobreak >nul
-                    goto waitloop
-                )
-                echo [%date% %time%] Process exited >> %LOG%
-                timeout /t 2 /nobreak >nul
-                echo [%date% %time%] Extracting ZIP... >> %LOG%
-                powershell -NoProfile -Command "Expand-Archive -Path '{zipPath}' -DestinationPath '{tempDir}' -Force" >> %LOG% 2>&1
-                echo [%date% %time%] Expand-Archive exit code: %errorlevel% >> %LOG%
-                if not exist "{tempDir}\{exeName}" (
-                    echo [%date% %time%] ERROR: {exeName} not found in temp dir after extraction! >> %LOG%
-                    echo [%date% %time%] Temp dir contents: >> %LOG%
-                    dir "{tempDir}" >> %LOG% 2>&1
-                    goto launch
-                )
-                echo [%date% %time%] Copying files to {appDir}... >> %LOG%
-                xcopy /s /y /q /i "{tempDir}\*" "{appDir}" >> %LOG% 2>&1
-                echo [%date% %time%] xcopy exit code: %errorlevel% >> %LOG%
-                if errorlevel 1 (
-                    echo [%date% %time%] Copy failed, retrying in 3s... >> %LOG%
-                    timeout /t 3 /nobreak >nul
-                    xcopy /s /y /q /i "{tempDir}\*" "{appDir}" >> %LOG% 2>&1
-                    echo [%date% %time%] xcopy retry exit code: %errorlevel% >> %LOG%
-                )
-                :launch
-                echo [%date% %time%] Cleaning up temp... >> %LOG%
-                rmdir /s /q "{tempDir}" 2>nul
-                del "{zipPath}" 2>nul
-                echo [%date% %time%] Starting {targetExe} >> %LOG%
-                start "" "{targetExe}"
-                echo [%date% %time%] Done >> %LOG%
-                del "%~f0"
+
+            // Escape single quotes for PowerShell string literals
+            static string Esc(string s) => s.Replace("'", "''");
+
+            var script = $$"""
+                $ErrorActionPreference = 'Continue'
+                $logDir = '{{Esc(logDir)}}'
+                $logPath = '{{Esc(logPath)}}'
+                if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+                function Log($msg) { "[$( Get-Date -Format 'dd.MM.yyyy HH:mm:ss' )] $msg" | Out-File $logPath -Append -Encoding utf8 }
+
+                try {
+                    Log 'Update started'
+                    Log 'PID={{pid}} appDir={{Esc(appDir)}}'
+                    Log 'zipPath={{Esc(zipPath)}}'
+                    Log 'tempDir={{Esc(tempDir)}}'
+
+                    Log 'Waiting for process {{pid}} to exit...'
+                    while (Get-Process -Id {{pid}} -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }
+                    Log 'Process exited'
+
+                    Start-Sleep -Seconds 2
+
+                    Log 'Extracting ZIP...'
+                    Expand-Archive -Path '{{Esc(zipPath)}}' -DestinationPath '{{Esc(tempDir)}}' -Force
+                    Log 'Expand-Archive complete'
+
+                    $exePath = Join-Path '{{Esc(tempDir)}}' '{{Esc(exeName)}}'
+                    if (-not (Test-Path $exePath)) {
+                        Log "ERROR: {{Esc(exeName)}} not found in temp dir after extraction!"
+                        Log "Temp dir contents:"
+                        Get-ChildItem '{{Esc(tempDir)}}' -Recurse | Select-Object FullName | Out-File $logPath -Append
+                        throw 'EXE not found after extraction'
+                    }
+
+                    Log 'Copying files to {{Esc(appDir)}}...'
+                    Copy-Item -Path '{{Esc(tempDir)}}\*' -Destination '{{Esc(appDir)}}' -Recurse -Force
+                    Log 'Copy complete'
+
+                    Log 'Cleaning up temp...'
+                    Remove-Item '{{Esc(tempDir)}}' -Recurse -Force -ErrorAction SilentlyContinue
+                    Remove-Item '{{Esc(zipPath)}}' -Force -ErrorAction SilentlyContinue
+
+                    Log 'Starting {{Esc(targetExe)}}'
+                    Start-Process '{{Esc(targetExe)}}'
+                    Log 'Done'
+                } catch {
+                    Log "ERROR: $_"
+                    Log 'Starting app anyway...'
+                    Start-Process '{{Esc(targetExe)}}'
+                }
+
+                Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
                 """;
 
-            await File.WriteAllTextAsync(scriptPath, script);
+            await File.WriteAllTextAsync(scriptPath, script, System.Text.Encoding.UTF8);
             progress?.Report(95);
 
-            // Launch updater script and exit
+            // Launch PowerShell updater script and exit
             Process.Start(new ProcessStartInfo
             {
-                FileName = "cmd.exe",
-                Arguments = $"/c \"{scriptPath}\"",
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
             });
