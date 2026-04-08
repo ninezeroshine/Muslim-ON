@@ -30,7 +30,7 @@ public sealed class UpdateService
         _logger = logger;
     }
 
-    public static string CurrentVersion => "1.2.0";
+    public static string CurrentVersion => "1.2.1";
 
     /// <summary>
     /// Check GitHub Releases for a newer version.
@@ -108,17 +108,33 @@ public sealed class UpdateService
             fileStream.Close();
             progress?.Report(90);
 
-            // Write updater script that waits for app to exit, then copies files
+            // Write updater script that waits for app to ACTUALLY exit, then copies files
             var scriptPath = Path.Combine(Path.GetTempPath(), "MuslimON_Update.bat");
             var exeName = Path.GetFileName(Environment.ProcessPath ?? "PrayerShutdown.UI.exe");
+            var pid = Environment.ProcessId;
             var script = $"""
                 @echo off
                 echo Updating Muslim ON...
-                timeout /t 2 /nobreak >nul
+                echo Waiting for app to exit (PID {pid})...
+                :waitloop
+                tasklist /fi "PID eq {pid}" 2>nul | find "{pid}" >nul
+                if not errorlevel 1 (
+                    timeout /t 1 /nobreak >nul
+                    goto waitloop
+                )
+                echo App exited. Extracting update...
+                timeout /t 1 /nobreak >nul
                 powershell -NoProfile -Command "Expand-Archive -Path '{zipPath}' -DestinationPath '{tempDir}' -Force"
+                echo Copying files...
                 xcopy /s /y /q "{tempDir}\*" "{appDir}"
+                if errorlevel 1 (
+                    echo Copy failed, retrying...
+                    timeout /t 3 /nobreak >nul
+                    xcopy /s /y /q "{tempDir}\*" "{appDir}"
+                )
                 rmdir /s /q "{tempDir}"
                 del "{zipPath}"
+                echo Starting updated app...
                 start "" "{Path.Combine(appDir, exeName)}"
                 del "%~f0"
                 """;
