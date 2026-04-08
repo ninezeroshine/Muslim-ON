@@ -13,9 +13,10 @@
             </ResourceDictionary>
         </Grid.Resources>
 
-        <!-- Semi-transparent backdrop -->
-        <Border Background="{ThemeResource GeistGrayAlpha400Brush}"
-                Visibility="{x:Bind IsFullOverlay, Mode=OneWay}" />
+        <!-- Semi-transparent backdrop (Phase 4 only, controlled from code-behind) -->
+        <Border x:Name="BackdropBorder"
+                Background="{ThemeResource GeistGrayAlpha400Brush}"
+                Visibility="Collapsed" />
 
         <!-- Central card -->
         <Border x:Name="CardBorder"
@@ -26,7 +27,8 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 BorderBrush="{ThemeResource GeistGray300Brush}"
-                BorderThickness="1">
+                BorderThickness="1"
+                Translation="0,0,16">
 
             <Border.Shadow>
                 <ThemeShadow />
@@ -41,13 +43,13 @@
 
                 <!-- Title -->
                 <TextBlock x:Name="TitleText"
-                           Style="{StaticResource HeadingStyle3}"
+                           Style="{StaticResource GeistHeading3Style}"
                            HorizontalAlignment="Center"
                            TextAlignment="Center" />
 
                 <!-- Description -->
                 <TextBlock x:Name="DescriptionText"
-                           Style="{StaticResource BodyStyle}"
+                           Style="{StaticResource GeistBodyDefaultStyle}"
                            Foreground="{ThemeResource GeistGray700Brush}"
                            HorizontalAlignment="Center"
                            TextAlignment="Center"
@@ -60,16 +62,16 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel>
                             <TextBlock x:Name="PrayerNameText"
-                                       Style="{StaticResource LabelStyle}"
+                                       Style="{StaticResource GeistLabelDefaultStyle}"
                                        FontWeight="SemiBold" />
                             <TextBlock x:Name="PrayerTimeText"
-                                       Style="{StaticResource MonoStyle}"
+                                       Style="{StaticResource GeistMonoDefaultStyle}"
                                        Foreground="{ThemeResource GeistGray700Brush}"
                                        FontSize="14" />
                         </StackPanel>
                         <TextBlock x:Name="CountdownText"
                                    Grid.Column="1"
-                                   Style="{StaticResource MonoStyle}"
+                                   Style="{StaticResource GeistMonoDefaultStyle}"
                                    FontSize="20"
                                    FontWeight="Bold"
                                    VerticalAlignment="Center"
@@ -79,7 +81,7 @@
 
                 <!-- Snooze info (Phase 3 only) -->
                 <TextBlock x:Name="SnoozeInfoText"
-                           Style="{StaticResource BodyStyle}"
+                           Style="{StaticResource GeistBodyDefaultStyle}"
                            Foreground="{ThemeResource GeistWarningBrush}"
                            HorizontalAlignment="Center"
                            TextAlignment="Center"
@@ -92,14 +94,14 @@
                             Content="I Prayed"
                             HorizontalAlignment="Stretch"
                             Height="44"
-                            Style="{StaticResource GeistPrimaryButtonStyle}"
+                            Style="{StaticResource GeistButtonPrimaryStyle}"
                             Click="OnPrayedClicked" />
 
                     <!-- Secondary action: varies by phase -->
                     <Button x:Name="SecondaryButton"
                             HorizontalAlignment="Stretch"
                             Height="44"
-                            Style="{StaticResource GeistSecondaryButtonStyle}"
+                            Style="{StaticResource GeistButtonSecondaryStyle}"
                             Click="OnSecondaryClicked" />
                 </StackPanel>
             </StackPanel>

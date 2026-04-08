@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using PrayerShutdown.Common;
 using PrayerShutdown.Common.Localization;
 using PrayerShutdown.Core.Domain.Enums;
 using PrayerShutdown.Core.Domain.Models;
@@ -43,12 +44,10 @@ public partial class App : Application
             _mainWindow = Services.GetRequiredService<MainWindow>();
             _mainWindow.Activate();
 
-            // Load settings + language
             var settingsRepo = Services.GetRequiredService<ISettingsRepository>();
             var settings = await settingsRepo.LoadAsync();
             LocalizationService.Instance.SetLanguage(settings.Language);
 
-            // Initialize scheduler with 4-phase events
             var scheduler = Services.GetRequiredService<ISchedulerService>();
             scheduler.PrayerTimeApproaching += OnPhase1_Reminder;
             scheduler.PrayerTimeArrived += OnPhase2_PrayNow;
@@ -58,67 +57,71 @@ public partial class App : Application
             if (settings.Location.SelectedLocation is not null)
                 await scheduler.InitializeAsync();
 
-            // Tray icon
             _trayIcon = new TrayIconManager(scheduler);
             _trayIcon.Initialize(_mainWindow);
         }
         catch (Exception ex)
         {
-            WriteCrashLog(ex);
+            WriteLog("OnLaunched", ex);
         }
     }
 
-    // ═══════════════════════════════════════════
-    //  Phase 1: Gentle Reminder (15 min before)
-    // ═══════════════════════════════════════════
+    // ── Phase handlers ──
+
     private void OnPhase1_Reminder(object? sender, PrayerTime prayer)
     {
         _dispatcher?.TryEnqueue(() =>
         {
-            _activePrayer = prayer;
-            ShowOverlay(OverlayPhase.Remind, prayer);
+            try
+            {
+                _activePrayer = prayer;
+                ShowOverlay(OverlayPhase.Remind, prayer);
+            }
+            catch (Exception ex) { WriteLog("Phase1_Reminder", ex); }
         });
     }
 
-    // ═══════════════════════════════════════════
-    //  Phase 2: Prayer Time Arrived
-    // ═══════════════════════════════════════════
     private void OnPhase2_PrayNow(object? sender, PrayerTime prayer)
     {
         _dispatcher?.TryEnqueue(() =>
         {
-            _activePrayer = prayer;
-            ShowOverlay(OverlayPhase.PrayNow, prayer);
+            try
+            {
+                _activePrayer = prayer;
+                ShowOverlay(OverlayPhase.PrayNow, prayer);
+            }
+            catch (Exception ex) { WriteLog("Phase2_PrayNow", ex); }
         });
     }
 
-    // ═══════════════════════════════════════════
-    //  Phase 3: Escalating Nudges
-    // ═══════════════════════════════════════════
     private void OnPhase3_Nudge(object? sender, PrayerNudgeEventArgs e)
     {
         _dispatcher?.TryEnqueue(() =>
         {
-            _activePrayer = e.Prayer;
-            ShowOverlay(OverlayPhase.Nudge, e.Prayer, e.NudgeNumber, e.MaxNudges);
+            try
+            {
+                _activePrayer = e.Prayer;
+                ShowOverlay(OverlayPhase.Nudge, e.Prayer, e.NudgeNumber, e.MaxNudges);
+            }
+            catch (Exception ex) { WriteLog("Phase3_Nudge", ex); }
         });
     }
 
-    // ═══════════════════════════════════════════
-    //  Phase 4: Shutdown
-    // ═══════════════════════════════════════════
     private void OnPhase4_Shutdown(object? sender, PrayerTime prayer)
     {
         _dispatcher?.TryEnqueue(() =>
         {
-            _activePrayer = prayer;
-            ShowOverlay(OverlayPhase.Shutdown, prayer);
+            try
+            {
+                _activePrayer = prayer;
+                ShowOverlay(OverlayPhase.Shutdown, prayer);
+            }
+            catch (Exception ex) { WriteLog("Phase4_Shutdown", ex); }
         });
     }
 
-    // ═══════════════════════════════════════════
-    //  Overlay Management
-    // ═══════════════════════════════════════════
+    // ── Overlay Management ──
+
     private void ShowOverlay(OverlayPhase phase, PrayerTime prayer, int nudgeNumber = 0, int maxNudges = 0)
     {
         CloseOverlay();
@@ -148,29 +151,20 @@ public partial class App : Application
         _overlay = null;
     }
 
-    // ── Overlay event handlers ──
-
     private void OnOverlay_Prayed(object? sender, EventArgs e)
     {
         if (_activePrayer is null) return;
-
         var scheduler = Services.GetRequiredService<ISchedulerService>();
         scheduler.MarkAsPrayed(_activePrayer);
         CloseOverlay();
         _activePrayer = null;
     }
 
-    private void OnOverlay_Dismiss(object? sender, EventArgs e)
-    {
-        // Phase 1: "I'll pray soon" — close overlay, Phase 2 will fire at prayer time
-        CloseOverlay();
-    }
+    private void OnOverlay_Dismiss(object? sender, EventArgs e) => CloseOverlay();
 
     private void OnOverlay_GoingToPray(object? sender, EventArgs e)
     {
         if (_activePrayer is null) return;
-
-        // Phase 2: "Going to pray" — hide overlay, keep timers active
         var scheduler = Services.GetRequiredService<ISchedulerService>();
         scheduler.SetWaitingForPrayer(_activePrayer);
         CloseOverlay();
@@ -179,33 +173,30 @@ public partial class App : Application
     private void OnOverlay_Snooze(object? sender, EventArgs e)
     {
         if (_activePrayer is null) return;
-
-        // Phase 3: snooze — reschedule nudge
         var scheduler = Services.GetRequiredService<ISchedulerService>();
         scheduler.SnoozePrayer(_activePrayer);
         CloseOverlay();
     }
 
-    private void OnOverlay_ShutdownFinished(object? sender, EventArgs e)
-    {
-        // Phase 4 countdown reached zero — shutdown already initiated by scheduler
-        CloseOverlay();
-    }
+    private void OnOverlay_ShutdownFinished(object? sender, EventArgs e) => CloseOverlay();
+
+    // ── Crash logging ──
 
     private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
         e.Handled = true;
-        WriteCrashLog(e.Exception);
+        WriteLog("UnhandledException", e.Exception);
     }
 
-    private static void WriteCrashLog(Exception ex)
+    private static void WriteLog(string context, Exception ex)
     {
         try
         {
-            var path = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                "MuslimOn_crash.log");
-            File.WriteAllText(path, $"{DateTime.Now}: {ex}");
+            var logDir = Path.Combine(Constants.AppDataPath, "logs");
+            Directory.CreateDirectory(logDir);
+            var logPath = Path.Combine(logDir, "crash.log");
+            var entry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{context}] {ex}\n\n";
+            File.AppendAllText(logPath, entry);
         }
         catch { }
     }
