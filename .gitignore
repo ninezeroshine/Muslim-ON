@@ -59,3 +59,11 @@ priconfig.xml
 *.zip
 priconfig.xml
 Design-ref.md
+
+## Local-only diagnostics & noise (never commit)
+update.log
+robocopy.log
+crash.log
+overlay_errors.log
+image.png
+.mcp.json

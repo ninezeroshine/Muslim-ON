@@ -20,8 +20,13 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _prayerTimeTimers = new();
     // Phase 3: nudge timers (escalating after prayer)
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _nudgeTimers = new();
-    // Phase 4: shutdown timers
+    // Phase 4: shutdown event timers — fire the ShutdownTriggered event for the UI to react
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _shutdownTimers = new();
+    // Phase 4 safety net: if the UI never confirms shutdown within
+    // (ShutdownCountdownSeconds + ShutdownSafetyBufferSeconds) seconds we fire
+    // ExecuteShutdown ourselves as a fallback. Cancelled by overlay on success
+    // or by MarkAsPrayed/Snooze/Recalculate.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _shutdownSafetyTimers = new();
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, int> _snoozeCounts = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, bool> _prayedToday = new();
@@ -110,6 +115,10 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         if (_shutdownService.HasPendingShutdown)
             _shutdownService.CancelPendingShutdown();
 
+        // Cancel the previous shutdown safety net — a fresh one will be armed
+        // when OnShutdownTriggered fires after the rescheduled delay below.
+        DisposeTimer(_shutdownSafetyTimers, prayer.Name);
+
         // Reschedule next nudge
         DisposeTimer(_nudgeTimers, prayer.Name);
         var delay = TimeSpan.FromMinutes(Constants.NudgeIntervalMinutes);
@@ -123,6 +132,15 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         _shutdownTimers[prayer.Name] = new Timer(
             _ => OnShutdownTriggered(prayer),
             null, shutdownDelay, Timeout.InfiniteTimeSpan);
+    }
+
+    public void CancelShutdownSafety(PrayerName prayerName)
+    {
+        if (_shutdownSafetyTimers.TryRemove(prayerName, out var timer))
+        {
+            timer?.Dispose();
+            _logger.LogInformation("[CancelShutdownSafety] {Prayer} — overlay handled shutdown, safety net stood down", prayerName);
+        }
     }
 
     private async Task RecalculateAsync(bool preservePrayedState = true)
@@ -295,6 +313,25 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     }
 
     // ── Phase 4: Shutdown ──
+    //
+    // This is the only path that can shut down the user's PC, so it must be both
+    // visible (always show the overlay) AND reliable (never silently fail to act).
+    // We split the responsibility:
+    //
+    //   PRIMARY:  fire ShutdownTriggered event → UI shows the overlay countdown →
+    //             on countdown=0 the UI calls IShutdownService.ExecuteShutdown
+    //             AND ISchedulerService.CancelShutdownSafety to disarm the timer
+    //             below.
+    //
+    //   SAFETY:   arm a timer for (ShutdownCountdownSeconds + ShutdownSafetyBufferSeconds)
+    //             seconds. If it fires, the overlay never confirmed — call
+    //             ExecuteShutdown ourselves so the user still gets shut down.
+    //             Covers: overlay creation crash, UI freeze, user closed overlay
+    //             via the X button without acting.
+    //
+    // The overlay countdown and the safety timer are deliberately offset by the
+    // safety buffer so the UI always wins the race in the happy path, never
+    // producing two ExecuteShutdown calls.
     private void OnShutdownTriggered(PrayerTime prayer)
     {
         if (_prayedToday.ContainsKey(prayer.Name))
@@ -308,8 +345,43 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
             return;
         }
 
-        _logger.LogWarning("[Phase 4] {Prayer} — SHUTDOWN TRIGGERED", prayer.Name);
+        _logger.LogWarning("[Phase 4] {Prayer} — firing event, arming safety net", prayer.Name);
         ShutdownTriggered?.Invoke(this, prayer);
+
+        // Arm safety net. Disposed by overlay (success path), MarkAsPrayed,
+        // SnoozePrayer, or RecalculateAsync(preservePrayedState:false).
+        DisposeTimer(_shutdownSafetyTimers, prayer.Name);
+        var safetyDelay = TimeSpan.FromSeconds(
+            Constants.ShutdownCountdownSeconds + Constants.ShutdownSafetyBufferSeconds);
+        _shutdownSafetyTimers[prayer.Name] = new Timer(
+            _ => OnShutdownSafetyNetFired(prayer),
+            null,
+            safetyDelay,
+            Timeout.InfiniteTimeSpan);
+    }
+
+    private void OnShutdownSafetyNetFired(PrayerTime prayer)
+    {
+        // Re-check both gates: the user may have prayed in the last second, or
+        // the overlay may have already started a system shutdown via
+        // _shutdownService.ExecuteShutdown.
+        if (_prayedToday.ContainsKey(prayer.Name))
+        {
+            _logger.LogInformation("[Phase 4 SafetyNet] {Prayer} — skipped, prayed", prayer.Name);
+            return;
+        }
+        if (_shutdownService.HasPendingShutdown)
+        {
+            _logger.LogInformation("[Phase 4 SafetyNet] {Prayer} — skipped, shutdown already pending (overlay handled it)", prayer.Name);
+            return;
+        }
+        if (!_shutdownSafetyTimers.ContainsKey(prayer.Name))
+        {
+            _logger.LogInformation("[Phase 4 SafetyNet] {Prayer} — skipped, safety net was disarmed", prayer.Name);
+            return;
+        }
+
+        _logger.LogWarning("[Phase 4 SafetyNet] {Prayer} — overlay never confirmed shutdown, FORCING fallback", prayer.Name);
         _shutdownService.ExecuteShutdown();
     }
 
@@ -374,6 +446,7 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         DisposeTimer(_prayerTimeTimers, name);
         DisposeTimer(_nudgeTimers, name);
         DisposeTimer(_shutdownTimers, name);
+        DisposeTimer(_shutdownSafetyTimers, name);
     }
 
     private void CancelAllTimers()
@@ -382,6 +455,7 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         DisposeAll(_prayerTimeTimers);
         DisposeAll(_nudgeTimers);
         DisposeAll(_shutdownTimers);
+        DisposeAll(_shutdownSafetyTimers);
     }
 
     private static void DisposeAll(System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> dict)

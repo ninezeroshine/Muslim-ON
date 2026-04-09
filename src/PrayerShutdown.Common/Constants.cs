@@ -13,6 +13,14 @@ public static class Constants
     public const int NudgeIntervalMinutes = 5;
     public const int ShutdownCountdownSeconds = 60;
 
+    /// <summary>
+    /// Extra grace added to the shutdown safety-net timer in PrayerScheduler.
+    /// If the overlay never confirms shutdown within
+    /// (<see cref="ShutdownCountdownSeconds"/> + this) seconds, the scheduler
+    /// fires the shutdown itself as a fallback.
+    /// </summary>
+    public const int ShutdownSafetyBufferSeconds = 10;
+
     public static string AppDataPath =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

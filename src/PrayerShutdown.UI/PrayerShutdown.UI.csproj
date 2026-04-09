@@ -13,6 +13,12 @@
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <EnableMsixTooling>false</EnableMsixTooling>
     <AppxPackage>false</AppxPackage>
+    <!--
+      Single-instance enforcement: replace the auto-generated Main with our own
+      Program.cs that calls AppInstance.FindOrRegisterForKey before starting the
+      Application. See src/PrayerShutdown.UI/Program.cs for details.
+    -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

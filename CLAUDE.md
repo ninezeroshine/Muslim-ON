@@ -8,7 +8,7 @@ Always respond in Russian. All discussions, explanations, commit messages, PR de
 
 ## Project Overview
 
-**Muslim ON** — Windows desktop app for Islamic prayer times with auto-shutdown/sleep/hibernate. Built with WinUI 3 + C# 12 + .NET 8. Current version: **1.2.9**.
+**Muslim ON** — Windows desktop app for Islamic prayer times with auto-shutdown/sleep/hibernate. Built with WinUI 3 + C# 12 + .NET 8. Current version: **1.3.0**.
 
 ## Build & Run Commands
 
@@ -94,7 +94,7 @@ NuGet versions centralized in `Directory.Packages.props`. SDK pinned to .NET 8.0
 
 ## Best Practices & Known Pitfalls
 
-Distilled from versions 1.2.0 – 1.2.9 — real bugs that cost multiple patch releases. Read before touching the listed areas. Full details in MemPalace wing `muslim-on`.
+Distilled from versions 1.2.0 – 1.3.0 — real bugs that cost multiple patch releases. Read before touching the listed areas. Full details in MemPalace wing `muslim-on`.
 
 ### WinUI 3 — Unpackaged Publish (XBF files)
 

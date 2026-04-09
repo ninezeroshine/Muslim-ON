@@ -21,6 +21,11 @@ public partial class App : Application
     private PrayerOverlayWindow? _overlay;
     private PrayerTime? _activePrayer;
     private ISchedulerService? _scheduler;
+    private IShutdownService? _shutdownService;
+
+    // Single-instance reactivation state — see OnReactivated.
+    private volatile bool _isReady;
+    private volatile bool _pendingReactivation;
 
     public IHost Host { get; }
     public static new App Current => (App)Application.Current;
@@ -52,6 +57,7 @@ public partial class App : Application
             LocalizationService.Instance.SetLanguage(settings.Language);
 
             _scheduler = Services.GetRequiredService<ISchedulerService>();
+            _shutdownService = Services.GetRequiredService<IShutdownService>();
             _scheduler.PrayerTimeApproaching += OnPhase1_Reminder;
             _scheduler.PrayerTimeArrived += OnPhase2_PrayNow;
             _scheduler.PrayerNudge += OnPhase3_Nudge;
@@ -62,10 +68,63 @@ public partial class App : Application
 
             _trayIcon = new TrayIconManager(_scheduler);
             _trayIcon.Initialize(_mainWindow);
+
+            // App is now fully initialized — flush any reactivation requests that
+            // arrived from secondary instances during startup.
+            _isReady = true;
+            if (_pendingReactivation)
+            {
+                _pendingReactivation = false;
+                BringToForeground();
+            }
         }
         catch (Exception ex)
         {
             WriteLog("OnLaunched", ex);
+        }
+    }
+
+    // ── Single-instance reactivation ──
+
+    /// <summary>
+    /// Called by <see cref="Program.OnReactivated"/> when a secondary process
+    /// redirects its activation here. Marshals to the UI thread and brings the
+    /// main window forward. If the app is still initializing, queues the request
+    /// until <see cref="OnLaunched"/> completes.
+    /// </summary>
+    public void OnReactivated()
+    {
+        var dispatcher = _dispatcher;
+        if (dispatcher is null)
+        {
+            // Activation arrived before we even captured the dispatcher —
+            // OnLaunched will pick this up at the end.
+            _pendingReactivation = true;
+            return;
+        }
+
+        dispatcher.TryEnqueue(() =>
+        {
+            if (!_isReady)
+            {
+                _pendingReactivation = true;
+                return;
+            }
+            BringToForeground();
+        });
+    }
+
+    private void BringToForeground()
+    {
+        try
+        {
+            if (_mainWindow is null) return;
+            _mainWindow.AppWindow?.Show();
+            _mainWindow.Activate();
+        }
+        catch (Exception ex)
+        {
+            WriteLog("BringToForeground", ex);
         }
     }
 
@@ -191,7 +250,24 @@ public partial class App : Application
         CloseOverlay();
     }
 
-    private void OnOverlay_ShutdownFinished(object? sender, EventArgs e) => CloseOverlay();
+    private void OnOverlay_ShutdownFinished(object? sender, EventArgs e)
+    {
+        // Overlay countdown reached zero. We are now responsible for firing the
+        // actual shutdown command — and we must cancel the scheduler's safety-net
+        // timer because we are about to do exactly the job it was guarding.
+        var prayer = _activePrayer;
+        if (prayer is not null)
+        {
+            _scheduler?.CancelShutdownSafety(prayer.Name);
+            _shutdownService?.ExecuteShutdown();
+        }
+        else
+        {
+            WriteLog("OnOverlay_ShutdownFinished", new InvalidOperationException(
+                "Overlay countdown finished but _activePrayer was null"));
+        }
+        CloseOverlay();
+    }
 
     // ── Crash logging ──
 

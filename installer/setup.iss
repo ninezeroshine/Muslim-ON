@@ -2,7 +2,7 @@
 ; Run: ISCC.exe setup.iss
 
 #define MyAppName "Muslim ON"
-#define MyAppVersion "1.2.9"
+#define MyAppVersion "1.3.0"
 #define MyAppPublisher "Muslim ON"
 #define MyAppExeName "PrayerShutdown.UI.exe"
 #define MyAppURL "https://github.com/muslimOn"
@@ -26,6 +26,13 @@ ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 UninstallDisplayIcon={app}\Assets\app.ico
 PrivilegesRequired=lowest
+
+; Gracefully close any running Muslim ON instances during install/upgrade and
+; restart them after. Without this, the installer fails to overwrite locked
+; .xbf/.dll files when the user updates over a running tray instance.
+CloseApplications=force
+CloseApplicationsFilter=*.exe,*.dll
+RestartApplications=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

@@ -37,6 +37,14 @@ public interface ISchedulerService
     void SetWaitingForPrayer(PrayerTime prayer);
 
     /// <summary>
+    /// Cancels the Phase 4 shutdown safety-net timer for the given prayer.
+    /// Called by the UI layer when the overlay countdown reaches zero and the UI
+    /// itself is firing <c>IShutdownService.ExecuteShutdown</c> — without this
+    /// the safety net would fire a second shutdown call seconds later.
+    /// </summary>
+    void CancelShutdownSafety(PrayerName prayerName);
+
+    /// <summary>
     /// Debug helper — manually fires a phase event with a synthetic PrayerTime (now).
     /// Does not touch prayed state or schedule real timers. Phase 4 fires the event only
     /// and does NOT call the real shutdown service.
