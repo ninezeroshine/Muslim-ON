@@ -20,11 +20,13 @@ public partial class App : Application
     private DispatcherQueue? _dispatcher;
     private PrayerOverlayWindow? _overlay;
     private PrayerTime? _activePrayer;
+    private ISchedulerService? _scheduler;
 
     public IHost Host { get; }
     public static new App Current => (App)Application.Current;
     public IServiceProvider Services => Host.Services;
     public TrayIconManager? TrayIcon => _trayIcon;
+    public ISchedulerService? Scheduler => _scheduler;
 
     public App()
     {
@@ -49,16 +51,16 @@ public partial class App : Application
             var settings = await settingsRepo.LoadAsync();
             LocalizationService.Instance.SetLanguage(settings.Language);
 
-            var scheduler = Services.GetRequiredService<ISchedulerService>();
-            scheduler.PrayerTimeApproaching += OnPhase1_Reminder;
-            scheduler.PrayerTimeArrived += OnPhase2_PrayNow;
-            scheduler.PrayerNudge += OnPhase3_Nudge;
-            scheduler.ShutdownTriggered += OnPhase4_Shutdown;
+            _scheduler = Services.GetRequiredService<ISchedulerService>();
+            _scheduler.PrayerTimeApproaching += OnPhase1_Reminder;
+            _scheduler.PrayerTimeArrived += OnPhase2_PrayNow;
+            _scheduler.PrayerNudge += OnPhase3_Nudge;
+            _scheduler.ShutdownTriggered += OnPhase4_Shutdown;
 
             if (settings.Location.SelectedLocation is not null)
-                await scheduler.InitializeAsync();
+                await _scheduler.InitializeAsync();
 
-            _trayIcon = new TrayIconManager(scheduler);
+            _trayIcon = new TrayIconManager(_scheduler);
             _trayIcon.Initialize(_mainWindow);
         }
         catch (Exception ex)
@@ -154,28 +156,38 @@ public partial class App : Application
 
     private void OnOverlay_Prayed(object? sender, EventArgs e)
     {
-        if (_activePrayer is null) return;
-        var scheduler = Services.GetRequiredService<ISchedulerService>();
-        scheduler.MarkAsPrayed(_activePrayer);
-        CloseOverlay();
+        var prayer = _activePrayer;
+        if (prayer is null || _scheduler is null)
+        {
+            WriteLog("OnOverlay_Prayed", new InvalidOperationException(
+                $"Skipped: _activePrayer={(prayer is null ? "null" : prayer.Name.ToString())}, " +
+                $"_scheduler={(_scheduler is null ? "null" : "ok")}"));
+            CloseOverlay();
+            return;
+        }
+
+        _scheduler.MarkAsPrayed(prayer);
         _activePrayer = null;
+        CloseOverlay();
     }
 
-    private void OnOverlay_Dismiss(object? sender, EventArgs e) => CloseOverlay();
+    private void OnOverlay_Dismiss(object? sender, EventArgs e)
+    {
+        _activePrayer = null;
+        CloseOverlay();
+    }
 
     private void OnOverlay_GoingToPray(object? sender, EventArgs e)
     {
-        if (_activePrayer is null) return;
-        var scheduler = Services.GetRequiredService<ISchedulerService>();
-        scheduler.SetWaitingForPrayer(_activePrayer);
+        if (_activePrayer is not null)
+            _scheduler?.SetWaitingForPrayer(_activePrayer);
         CloseOverlay();
     }
 
     private void OnOverlay_Snooze(object? sender, EventArgs e)
     {
-        if (_activePrayer is null) return;
-        var scheduler = Services.GetRequiredService<ISchedulerService>();
-        scheduler.SnoozePrayer(_activePrayer);
+        if (_activePrayer is not null)
+            _scheduler?.SnoozePrayer(_activePrayer);
         CloseOverlay();
     }
 

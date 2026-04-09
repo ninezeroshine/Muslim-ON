@@ -1,3 +1,4 @@
+using PrayerShutdown.Core.Domain.Enums;
 using PrayerShutdown.Core.Domain.Models;
 
 namespace PrayerShutdown.Core.Interfaces;
@@ -21,6 +22,12 @@ public interface ISchedulerService
     // Phase 4: shutdown triggered
     event EventHandler<PrayerTime>? ShutdownTriggered;
 
+    /// <summary>
+    /// Fired whenever a prayer is marked as prayed — from overlay, dashboard, or any other source.
+    /// Lets the dashboard keep its cards in sync when the overlay is used.
+    /// </summary>
+    event EventHandler<PrayerTime>? PrayerMarkedAsPrayed;
+
     void MarkAsPrayed(PrayerTime prayer);
     void SnoozePrayer(PrayerTime prayer);
 
@@ -28,4 +35,11 @@ public interface ISchedulerService
     /// User clicked "Going to pray" — hides overlay but keeps nudge/shutdown timers active.
     /// </summary>
     void SetWaitingForPrayer(PrayerTime prayer);
+
+    /// <summary>
+    /// Debug helper — manually fires a phase event with a synthetic PrayerTime (now).
+    /// Does not touch prayed state or schedule real timers. Phase 4 fires the event only
+    /// and does NOT call the real shutdown service.
+    /// </summary>
+    void TriggerTestPhase(TestPhase phase, PrayerName prayerName);
 }

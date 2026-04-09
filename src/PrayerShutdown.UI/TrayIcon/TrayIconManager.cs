@@ -4,6 +4,7 @@ using H.NotifyIcon;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using PrayerShutdown.Common.Localization;
+using PrayerShutdown.Core.Domain.Enums;
 using PrayerShutdown.Core.Extensions;
 using PrayerShutdown.Core.Interfaces;
 using PrayerShutdown.Services.Update;
@@ -21,6 +22,12 @@ public sealed class TrayIconManager : IDisposable
     // Win32 menu item IDs
     private const int ID_OPEN = 1;
     private const int ID_EXIT = 2;
+#if DEBUG
+    private const int ID_TEST_REMIND   = 10;
+    private const int ID_TEST_PRAYNOW  = 11;
+    private const int ID_TEST_NUDGE    = 12;
+    private const int ID_TEST_SHUTDOWN = 13;
+#endif
 
     public TrayIconManager(ISchedulerService scheduler)
     {
@@ -67,6 +74,15 @@ public sealed class TrayIconManager : IDisposable
             NativeMenu.AppendMenu(hMenu, 0x0800, 0, null);                      // MF_SEPARATOR
             NativeMenu.AppendMenu(hMenu, 0x0000, ID_EXIT, Loc.S("tray_exit")); // MF_STRING
 
+#if DEBUG
+            // Debug-only: synthesize phase events without waiting for real timers
+            NativeMenu.AppendMenu(hMenu, 0x0800, 0, null);                          // separator
+            NativeMenu.AppendMenu(hMenu, 0x0000, ID_TEST_REMIND,   "Debug: Test Phase 1 — Remind");
+            NativeMenu.AppendMenu(hMenu, 0x0000, ID_TEST_PRAYNOW,  "Debug: Test Phase 2 — PrayNow");
+            NativeMenu.AppendMenu(hMenu, 0x0000, ID_TEST_NUDGE,    "Debug: Test Phase 3 — Nudge");
+            NativeMenu.AppendMenu(hMenu, 0x0000, ID_TEST_SHUTDOWN, "Debug: Test Phase 4 — Shutdown (overlay only)");
+#endif
+
             // Get cursor position for menu placement
             NativeMenu.GetCursorPos(out var pt);
 
@@ -80,8 +96,17 @@ public sealed class TrayIconManager : IDisposable
 
             NativeMenu.DestroyMenu(hMenu);
 
-            if (cmd == ID_OPEN) ShowWindow();
-            else if (cmd == ID_EXIT) ExitApplication();
+            switch (cmd)
+            {
+                case ID_OPEN: ShowWindow(); break;
+                case ID_EXIT: ExitApplication(); break;
+#if DEBUG
+                case ID_TEST_REMIND:   _scheduler.TriggerTestPhase(TestPhase.Remind,   PrayerName.Dhuhr); break;
+                case ID_TEST_PRAYNOW:  _scheduler.TriggerTestPhase(TestPhase.PrayNow,  PrayerName.Dhuhr); break;
+                case ID_TEST_NUDGE:    _scheduler.TriggerTestPhase(TestPhase.Nudge,    PrayerName.Dhuhr); break;
+                case ID_TEST_SHUTDOWN: _scheduler.TriggerTestPhase(TestPhase.Shutdown, PrayerName.Dhuhr); break;
+#endif
+            }
         });
     }
 

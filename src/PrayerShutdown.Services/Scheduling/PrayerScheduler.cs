@@ -36,6 +36,7 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     public event EventHandler<PrayerTime>? PrayerTimeArrived;
     public event EventHandler<PrayerNudgeEventArgs>? PrayerNudge;
     public event EventHandler<PrayerTime>? ShutdownTriggered;
+    public event EventHandler<PrayerTime>? PrayerMarkedAsPrayed;
 
     public PrayerScheduler(
         IPrayerTimeCalculator calculator,
@@ -58,17 +59,32 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         ScheduleMidnightRecalculation();
     }
 
-    public void RecalculateSchedule() => _ = RecalculateAsync();
+    /// <summary>
+    /// Called by settings screens and shutdown-rule toggles. Preserves prayed/snooze state
+    /// so that "Я помолился" clicks survive unrelated settings changes.
+    /// Only the midnight timer resets prayed state.
+    /// </summary>
+    public void RecalculateSchedule() => _ = RecalculateAsync(preservePrayedState: true);
 
     public void MarkAsPrayed(PrayerTime prayer)
     {
-        _logger.LogInformation("Prayer marked as prayed: {Prayer}", prayer.Name);
+        _logger.LogInformation(
+            "[MarkAsPrayed] {Prayer} at {Time:HH:mm} — set prayed=true, disposing all phase timers",
+            prayer.Name, prayer.Time);
+
+        // Order matters: set flag BEFORE disposing timers so any in-flight callback sees prayed=true.
         _prayedToday[prayer.Name] = true;
         _waitingForPrayer.TryRemove(prayer.Name, out _);
         CancelAllTimersFor(prayer.Name);
 
         if (_shutdownService.HasPendingShutdown)
+        {
+            _logger.LogInformation("[MarkAsPrayed] {Prayer} — cancelling pending system shutdown", prayer.Name);
             _shutdownService.CancelPendingShutdown();
+        }
+
+        // Notify dashboard (or any other listener) so it can sync its card state.
+        PrayerMarkedAsPrayed?.Invoke(this, prayer);
     }
 
     public void SetWaitingForPrayer(PrayerTime prayer)
@@ -109,14 +125,25 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
             null, shutdownDelay, Timeout.InfiniteTimeSpan);
     }
 
-    private async Task RecalculateAsync()
+    private async Task RecalculateAsync(bool preservePrayedState = true)
     {
         try
         {
             CancelAllTimers();
-            _prayedToday.Clear();
-            _snoozeCounts.Clear();
-            _waitingForPrayer.Clear();
+
+            if (!preservePrayedState)
+            {
+                _logger.LogInformation("[Recalculate] resetting prayed/snooze/waiting state (midnight)");
+                _prayedToday.Clear();
+                _snoozeCounts.Clear();
+                _waitingForPrayer.Clear();
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "[Recalculate] preserving prayed state ({Count} prayers marked)",
+                    _prayedToday.Count);
+            }
 
             var settings = await _settingsRepo.LoadAsync();
             var location = settings.Location.SelectedLocation;
@@ -147,6 +174,16 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
 
     private void SchedulePrayer(PrayerTime prayer, PrayerShutdownRule rule)
     {
+        // Skip entirely if user already marked this prayer as prayed today.
+        // Prevents settings-save → RecalculateSchedule from re-arming cancelled nudge/shutdown timers.
+        if (_prayedToday.ContainsKey(prayer.Name))
+        {
+            _logger.LogInformation(
+                "[SchedulePrayer] {Prayer} already prayed today — skipping all phase timers",
+                prayer.Name);
+            return;
+        }
+
         var now = DateTime.Now;
 
         // Phase 1: Reminder (X minutes before prayer)
@@ -196,9 +233,20 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     // ── Phase 1: Gentle Reminder ──
     private void OnPrayerApproaching(PrayerTime prayer, int minutesBefore)
     {
-        if (_prayedToday.ContainsKey(prayer.Name)) return;
-        _logger.LogInformation("Phase 1 — Prayer approaching: {Prayer} in {Min} min", prayer.Name, minutesBefore);
+        // Guard #1: already prayed
+        if (_prayedToday.ContainsKey(prayer.Name))
+        {
+            _logger.LogInformation("[Phase 1] {Prayer} — skipped, already prayed", prayer.Name);
+            return;
+        }
+        // Guard #2: timer disposed (race between Dispose and pending ThreadPool callback)
+        if (!_reminderTimers.ContainsKey(prayer.Name))
+        {
+            _logger.LogInformation("[Phase 1] {Prayer} — skipped, timer disposed", prayer.Name);
+            return;
+        }
 
+        _logger.LogInformation("[Phase 1] {Prayer} approaching in {Min} min", prayer.Name, minutesBefore);
         PrayerTimeApproaching?.Invoke(this, prayer);
         _ = _notificationService.ShowPrayerReminderAsync(prayer, minutesBefore);
     }
@@ -206,19 +254,37 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     // ── Phase 2: Prayer Time Arrived ──
     private void OnPrayerTimeArrived(PrayerTime prayer)
     {
-        if (_prayedToday.ContainsKey(prayer.Name)) return;
-        _logger.LogInformation("Phase 2 — Prayer time arrived: {Prayer}", prayer.Name);
+        if (_prayedToday.ContainsKey(prayer.Name))
+        {
+            _logger.LogInformation("[Phase 2] {Prayer} — skipped, already prayed", prayer.Name);
+            return;
+        }
+        if (!_prayerTimeTimers.ContainsKey(prayer.Name))
+        {
+            _logger.LogInformation("[Phase 2] {Prayer} — skipped, timer disposed", prayer.Name);
+            return;
+        }
 
+        _logger.LogInformation("[Phase 2] {Prayer} time arrived", prayer.Name);
         PrayerTimeArrived?.Invoke(this, prayer);
     }
 
     // ── Phase 3: Escalating Nudge ──
     private void OnPrayerNudge(PrayerTime prayer, int nudgeNumber)
     {
-        if (_prayedToday.ContainsKey(prayer.Name)) return;
+        if (_prayedToday.ContainsKey(prayer.Name))
+        {
+            _logger.LogInformation("[Phase 3 Nudge #{N}] {Prayer} — skipped, already prayed", nudgeNumber, prayer.Name);
+            return;
+        }
+        if (!_nudgeTimers.ContainsKey(prayer.Name))
+        {
+            _logger.LogInformation("[Phase 3 Nudge #{N}] {Prayer} — skipped, timer disposed", nudgeNumber, prayer.Name);
+            return;
+        }
 
         var maxNudges = Constants.MaxSnoozeCount;
-        _logger.LogWarning("Phase 3 — Nudge #{Number}/{Max} for {Prayer}", nudgeNumber, maxNudges, prayer.Name);
+        _logger.LogWarning("[Phase 3 Nudge #{N}/{Max}] {Prayer} — firing", nudgeNumber, maxNudges, prayer.Name);
 
         PrayerNudge?.Invoke(this, new PrayerNudgeEventArgs
         {
@@ -231,11 +297,53 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     // ── Phase 4: Shutdown ──
     private void OnShutdownTriggered(PrayerTime prayer)
     {
-        if (_prayedToday.ContainsKey(prayer.Name)) return;
-        _logger.LogWarning("Phase 4 — SHUTDOWN TRIGGERED for: {Prayer}", prayer.Name);
+        if (_prayedToday.ContainsKey(prayer.Name))
+        {
+            _logger.LogInformation("[Phase 4] {Prayer} — skipped, already prayed", prayer.Name);
+            return;
+        }
+        if (!_shutdownTimers.ContainsKey(prayer.Name))
+        {
+            _logger.LogInformation("[Phase 4] {Prayer} — skipped, timer disposed", prayer.Name);
+            return;
+        }
 
+        _logger.LogWarning("[Phase 4] {Prayer} — SHUTDOWN TRIGGERED", prayer.Name);
         ShutdownTriggered?.Invoke(this, prayer);
         _shutdownService.ExecuteShutdown();
+    }
+
+    // ── Debug: manual phase trigger ──
+    /// <summary>
+    /// Debug helper — synthesizes a test PrayerTime and fires the phase event immediately.
+    /// Used by the tray Debug menu to exercise the overlay without waiting for the next prayer.
+    /// Does NOT schedule real timers and does NOT touch _prayedToday state.
+    /// </summary>
+    public void TriggerTestPhase(TestPhase phase, PrayerName prayerName)
+    {
+        var test = new PrayerTime(prayerName, DateTime.Now);
+        _logger.LogWarning("[DEBUG] Manually triggering {Phase} for {Prayer}", phase, prayerName);
+        switch (phase)
+        {
+            case TestPhase.Remind:
+                PrayerTimeApproaching?.Invoke(this, test);
+                break;
+            case TestPhase.PrayNow:
+                PrayerTimeArrived?.Invoke(this, test);
+                break;
+            case TestPhase.Nudge:
+                PrayerNudge?.Invoke(this, new PrayerNudgeEventArgs
+                {
+                    Prayer = test,
+                    NudgeNumber = 1,
+                    MaxNudges = Constants.MaxSnoozeCount,
+                });
+                break;
+            case TestPhase.Shutdown:
+                // Fire the event ONLY. Do NOT call _shutdownService.ExecuteShutdown() in debug.
+                ShutdownTriggered?.Invoke(this, test);
+                break;
+        }
     }
 
     private void ScheduleMidnightRecalculation()
@@ -247,8 +355,8 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         _midnightTimer?.Dispose();
         _midnightTimer = new Timer(_ =>
         {
-            _logger.LogInformation("Midnight recalculation triggered");
-            RecalculateSchedule();
+            _logger.LogInformation("Midnight recalculation triggered — resetting prayed state");
+            _ = RecalculateAsync(preservePrayedState: false);
             ScheduleMidnightRecalculation();
         }, null, delay, Timeout.InfiniteTimeSpan);
     }

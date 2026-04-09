@@ -18,6 +18,10 @@ public partial class PrayerDashboardViewModel : ObservableObject
     private readonly ISchedulerService _scheduler;
     private readonly UpdateService _updateService;
     private bool _initialized;
+    // Re-entrance guard for Dashboard ↔ Scheduler "prayed" sync.
+    // Dashboard click → MarkAsPrayed → event → our handler → Card.IsPrayed = true → PropertyChanged → HandlePrayerMarked.
+    // Without this flag, the loop would call MarkAsPrayed twice.
+    private bool _suppressPrayedSync;
 
     /// <summary>Code-behind hooks this to redraw Canvas after data changes.</summary>
     public event Action? TimelineChanged;
@@ -106,6 +110,9 @@ public partial class PrayerDashboardViewModel : ObservableObject
         _settingsRepo = settingsRepo;
         _scheduler = scheduler;
         _updateService = updateService;
+
+        // Sync dashboard cards when prayer is marked from overlay (or anywhere else).
+        _scheduler.PrayerMarkedAsPrayed += OnSchedulerPrayerMarked;
     }
 
     // ═══════════════════════════════════════════
@@ -380,9 +387,30 @@ public partial class PrayerDashboardViewModel : ObservableObject
 
     private void HandlePrayerMarked(PrayerCardModel card)
     {
+        if (_suppressPrayedSync) return;
+
         var prayer = _scheduler.TodaysPrayers?.GetPrayer(card.Name);
-        if (prayer is not null)
-            _scheduler.MarkAsPrayed(prayer);
+        if (prayer is null) return;
+
+        _suppressPrayedSync = true;
+        try { _scheduler.MarkAsPrayed(prayer); }
+        finally { _suppressPrayedSync = false; }
+    }
+
+    private void OnSchedulerPrayerMarked(object? sender, PrayerTime prayer)
+    {
+        if (_suppressPrayedSync) return;
+
+        var card = Prayers.FirstOrDefault(c => c.Name == prayer.Name);
+        if (card is null || card.IsPrayed) return;
+
+        _suppressPrayedSync = true;
+        try
+        {
+            card.IsPrayed = true;
+            card.RefreshState();
+        }
+        finally { _suppressPrayedSync = false; }
     }
 
     // ═══════════════════════════════════════════
