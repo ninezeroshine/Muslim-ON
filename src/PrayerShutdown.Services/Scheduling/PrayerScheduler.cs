@@ -229,14 +229,13 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     }
 
     // ── Phase 4: Shutdown ──
-    // NOTE: Only fires event. Actual shutdown execution moved to App.xaml.cs (overlay finish handler)
-    // to avoid race condition where shutdown starts before overlay appears.
     private void OnShutdownTriggered(PrayerTime prayer)
     {
         if (_prayedToday.ContainsKey(prayer.Name)) return;
         _logger.LogWarning("Phase 4 — SHUTDOWN TRIGGERED for: {Prayer}", prayer.Name);
 
         ShutdownTriggered?.Invoke(this, prayer);
+        _shutdownService.ExecuteShutdown();
     }
 
     private void ScheduleMidnightRecalculation()

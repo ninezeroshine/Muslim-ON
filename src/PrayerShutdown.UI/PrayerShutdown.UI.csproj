@@ -38,4 +38,20 @@
     <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fonts\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!--
+    Fix for unpackaged WinUI 3: dotnet publish doesn't copy .xbf files (compiled XAML).
+    Without this, Application.LoadComponent throws XamlParseException at runtime for
+    secondary windows (PrayerOverlayWindow) and any Page/Window whose XBF isn't on disk.
+    See: https://github.com/microsoft/microsoft-ui-xaml/issues for known issue.
+  -->
+  <Target Name="CopyXbfToPublish" AfterTargets="_CopyResolvedFilesToPublishAlways;_CopyResolvedFilesToPublishPreserveNewest">
+    <ItemGroup>
+      <_XbfFiles Include="$(OutDir)**\*.xbf" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(_XbfFiles)"
+      DestinationFiles="@(_XbfFiles->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+  </Target>
 </Project>

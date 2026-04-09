@@ -117,13 +117,7 @@ public partial class App : Application
                 _activePrayer = prayer;
                 ShowOverlay(OverlayPhase.Shutdown, prayer);
             }
-            catch (Exception ex)
-            {
-                WriteLog("Phase4_Shutdown", ex);
-                // Overlay failed — execute shutdown as fallback so the feature still works
-                var shutdownService = Services.GetRequiredService<IShutdownService>();
-                shutdownService.ExecuteShutdown();
-            }
+            catch (Exception ex) { WriteLog("Phase4_Shutdown", ex); }
         });
     }
 
@@ -185,13 +179,7 @@ public partial class App : Application
         CloseOverlay();
     }
 
-    private void OnOverlay_ShutdownFinished(object? sender, EventArgs e)
-    {
-        CloseOverlay();
-        // Shutdown execution moved here from PrayerScheduler to ensure overlay shows first
-        var shutdownService = Services.GetRequiredService<IShutdownService>();
-        shutdownService.ExecuteShutdown();
-    }
+    private void OnOverlay_ShutdownFinished(object? sender, EventArgs e) => CloseOverlay();
 
     // ── Crash logging ──
 
