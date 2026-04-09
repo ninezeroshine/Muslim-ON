@@ -30,7 +30,7 @@ public sealed class UpdateService
         _logger = logger;
     }
 
-    public static string CurrentVersion => "1.2.8";
+    public static string CurrentVersion => "1.2.9";
 
     /// <summary>
     /// Check GitHub Releases for a newer version.
@@ -123,25 +123,78 @@ public sealed class UpdateService
             // Escape single quotes for PowerShell string literals
             static string Esc(string s) => s.Replace("'", "''");
 
+            var procName = Path.GetFileNameWithoutExtension(exeName);
+            var robocopyLogPath = Path.Combine(logDir, "robocopy.log");
+
+            // v1.2.9 updater rewrite:
+            //  1) Wait for launcher PID to exit
+            //  2) Kill ALL leftover instances by process name (tray zombies, second instances)
+            //  3) Wait 3s for OS to release file handles (Defender scan, Explorer thumbnail, indexer)
+            //  4) Extract ZIP to temp
+            //  5) robocopy with /R:10 /W:1 — built-in retry handles transient file locks
+            //  6) If robocopy fails (exit 8+), throw and fallback to restarting OLD version
+            //     (never leave broken state — either full success or full rollback)
+            //  7) Start new version
+            //
+            // Why robocopy: Copy-Item has no retry. It fails on first LockViolation, leaving
+            // partial copy. Robocopy is Microsoft's robust copy — retries each file up to 10×.
+            // Documented fix for "file in use by another process" on Windows self-update.
             var script = $$"""
                 $ErrorActionPreference = 'Continue'
                 $logDir = '{{Esc(logDir)}}'
                 $logPath = '{{Esc(logPath)}}'
+                $robocopyLog = '{{Esc(robocopyLogPath)}}'
                 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
                 function Log($msg) { "[$( Get-Date -Format 'dd.MM.yyyy HH:mm:ss' )] $msg" | Out-File $logPath -Append -Encoding utf8 }
 
                 try {
-                    Log 'Update started'
-                    Log 'PID={{pid}} appDir={{Esc(appDir)}}'
-                    Log 'zipPath={{Esc(zipPath)}}'
-                    Log 'tempDir={{Esc(tempDir)}}'
+                    Log '=== Update started (v1.2.9 updater — robocopy + kill-all) ==='
+                    Log "launcherPid={{pid}} appDir='{{Esc(appDir)}}'"
+                    Log "zipPath='{{Esc(zipPath)}}'"
+                    Log "tempDir='{{Esc(tempDir)}}'"
 
-                    Log 'Waiting for process {{pid}} to exit...'
-                    while (Get-Process -Id {{pid}} -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }
-                    Log 'Process exited'
+                    # 1) Wait for launcher PID to exit (max 30s)
+                    Log 'Waiting for launcher PID {{pid}} to exit...'
+                    $timeout = 60
+                    while ((Get-Process -Id {{pid}} -ErrorAction SilentlyContinue) -and $timeout -gt 0) {
+                        Start-Sleep -Milliseconds 500
+                        $timeout--
+                    }
+                    Log "Launcher exit (timeout slots left: $timeout)"
 
-                    Start-Sleep -Seconds 2
+                    # 2) Kill ALL leftover instances by process name
+                    #    Covers: tray-only zombies, second instances, child windows, stuck processes
+                    $procName = '{{Esc(procName)}}'
+                    Log "Scanning for leftover '$procName' instances..."
+                    $leftover = @(Get-Process -Name $procName -ErrorAction SilentlyContinue)
+                    if ($leftover.Count -gt 0) {
+                        Log "Found $($leftover.Count) leftover instance(s), killing..."
+                        foreach ($p in $leftover) {
+                            try {
+                                Log "  Kill PID=$($p.Id) StartTime=$($p.StartTime)"
+                                Stop-Process -Id $p.Id -Force -ErrorAction Stop
+                            } catch {
+                                Log "    Failed to kill PID=$($p.Id): $_"
+                            }
+                        }
+                        Start-Sleep -Seconds 2
+                        # Verify all gone
+                        $stillAlive = @(Get-Process -Name $procName -ErrorAction SilentlyContinue)
+                        if ($stillAlive.Count -gt 0) {
+                            Log "WARNING: $($stillAlive.Count) instance(s) still alive after kill"
+                        } else {
+                            Log 'All instances terminated'
+                        }
+                    } else {
+                        Log 'No leftover instances'
+                    }
 
+                    # 3) Wait for OS to release file handles
+                    #    (Defender scan, Explorer thumbnail cache, Windows Search indexer)
+                    Log 'Waiting 3s for OS to release file handles...'
+                    Start-Sleep -Seconds 3
+
+                    # 4) Extract ZIP to temp
                     Log 'Extracting ZIP...'
                     Expand-Archive -Path '{{Esc(zipPath)}}' -DestinationPath '{{Esc(tempDir)}}' -Force
                     Log 'Expand-Archive complete'
@@ -149,25 +202,50 @@ public sealed class UpdateService
                     $exePath = Join-Path '{{Esc(tempDir)}}' '{{Esc(exeName)}}'
                     if (-not (Test-Path $exePath)) {
                         Log "ERROR: {{Esc(exeName)}} not found in temp dir after extraction!"
-                        Log "Temp dir contents:"
+                        Log 'Temp dir contents:'
                         Get-ChildItem '{{Esc(tempDir)}}' -Recurse | Select-Object FullName | Out-File $logPath -Append
                         throw 'EXE not found after extraction'
                     }
 
-                    Log 'Copying files to {{Esc(appDir)}}...'
-                    Copy-Item -Path '{{Esc(tempDir)}}\*' -Destination '{{Esc(appDir)}}' -Recurse -Force
+                    # 5) Copy with robocopy (built-in retry for file locks)
+                    #    /E   — copy subdirs including empty
+                    #    /IS  — include same files (overwrite unchanged)
+                    #    /IT  — include tweaked files
+                    #    /R:10 — retry 10 times per file
+                    #    /W:1  — wait 1 second between retries (total 10s max per file)
+                    #    /NP   — no progress output (cleaner log)
+                    #    /NFL /NDL — no file/dir list (cleaner log)
+                    #    /LOG+ — append to log file
+                    Log "Copying with robocopy (retry=10, wait=1s)..."
+                    $rcOutput = & robocopy '{{Esc(tempDir)}}' '{{Esc(appDir)}}' /E /IS /IT /R:10 /W:1 /NP /NFL /NDL "/LOG+:$robocopyLog" 2>&1
+                    $rcExit = $LASTEXITCODE
+                    Log "Robocopy exit code: $rcExit"
+                    # Robocopy exit codes: 0=nothing copied, 1=files copied, 2=extra files, 3=1+2,
+                    # 4=mismatched, 5=4+1, 6=4+2, 7=4+1+2. All 0-7 are SUCCESS. 8+ is FAILURE.
+                    if ($rcExit -ge 8) {
+                        Log "ERROR: Robocopy failed (exit=$rcExit). Tail of robocopy log:"
+                        if (Test-Path $robocopyLog) {
+                            Get-Content $robocopyLog -Tail 40 | ForEach-Object { Log "  RC: $_" }
+                        }
+                        throw "Robocopy failed with exit code $rcExit — files are still locked after 10 retries"
+                    }
+
                     Log 'Copy complete'
 
+                    # 6) Cleanup temp
                     Log 'Cleaning up temp...'
                     Remove-Item '{{Esc(tempDir)}}' -Recurse -Force -ErrorAction SilentlyContinue
                     Remove-Item '{{Esc(zipPath)}}' -Force -ErrorAction SilentlyContinue
 
-                    Log 'Starting {{Esc(targetExe)}}'
+                    # 7) Start new version
+                    Log "Starting '{{Esc(targetExe)}}'"
                     Start-Process '{{Esc(targetExe)}}'
-                    Log 'Done'
+                    Log '=== Update SUCCESS ==='
                 } catch {
                     Log "ERROR: $_"
-                    Log 'Starting app anyway...'
+                    Log "Exception: $($_.Exception.GetType().FullName)"
+                    Log "Stack: $($_.ScriptStackTrace)"
+                    Log 'Starting (possibly old) app version as fallback...'
                     Start-Process '{{Esc(targetExe)}}'
                 }
 
