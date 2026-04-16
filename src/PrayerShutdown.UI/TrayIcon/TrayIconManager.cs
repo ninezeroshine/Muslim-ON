@@ -5,6 +5,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using PrayerShutdown.Common.Localization;
 using PrayerShutdown.Core.Domain.Enums;
+using PrayerShutdown.Core.Domain.Models;
 using PrayerShutdown.Core.Extensions;
 using PrayerShutdown.Core.Interfaces;
 using PrayerShutdown.Services.Update;
@@ -113,12 +114,39 @@ public sealed class TrayIconManager : IDisposable
     private void UpdateTooltip()
     {
         if (_trayIcon is null) return;
-        var next = _scheduler.NextPrayer;
-        if (next is null) { _trayIcon.ToolTipText = $"Muslim ON v{UpdateService.CurrentVersion}"; return; }
 
-        var remaining = next.Time.TimeUntil().ToCountdownString();
-        var name = Loc.S($"prayer_{next.Name.ToString().ToLowerInvariant()}");
-        _trayIcon.ToolTipText = $"Muslim ON v{UpdateService.CurrentVersion} — {name} {Loc.S("until")} {remaining}";
+        var plan = _scheduler.GetNextPhasePlan();
+        var prefix = $"Muslim ON v{UpdateService.CurrentVersion}";
+
+        if (plan is null)
+        {
+            _trayIcon.ToolTipText = prefix;
+            return;
+        }
+
+        var name = Loc.S($"prayer_{plan.Prayer.Name.ToString().ToLowerInvariant()}");
+        var now = DateTime.Now;
+        var (phaseLabel, at) = NearestUpcomingPhase(plan, now);
+
+        if (at is null)
+        {
+            _trayIcon.ToolTipText = $"{prefix} \u2014 " +
+                string.Format(Loc.S("tray_next"), name, plan.PrayAt.ToString("HH:mm"));
+            return;
+        }
+
+        var remaining = (at.Value - now).ToCountdownString();
+        var phaseIn = string.Format(Loc.S("tray_phase_in"), phaseLabel, remaining);
+        _trayIcon.ToolTipText = $"{prefix} \u2014 {name} \u00b7 {phaseIn}";
+    }
+
+    private static (string Label, DateTime? At) NearestUpcomingPhase(NextPhasePlan plan, DateTime now)
+    {
+        if (plan.RemindAt is { } r && r > now) return (Loc.S("phase_remind"), r);
+        if (plan.PrayAt > now) return (Loc.S("phase_pray_now"), plan.PrayAt);
+        if (plan.NudgeAt is { } n && n > now) return (Loc.S("phase_nudge"), n);
+        if (plan.ShutdownAt is { } s && s > now) return (Loc.S("phase_shutdown"), s);
+        return ("", null);
     }
 
     public void ShowWindow() => _mainWindow?.Activate();

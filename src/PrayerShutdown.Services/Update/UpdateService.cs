@@ -30,7 +30,7 @@ public sealed class UpdateService
         _logger = logger;
     }
 
-    public static string CurrentVersion => "1.3.0";
+    public static string CurrentVersion => "1.4.0";
 
     /// <summary>
     /// Check GitHub Releases for a newer version.

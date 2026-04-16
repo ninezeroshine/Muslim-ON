@@ -10,21 +10,31 @@ public interface ISchedulerService
     DailyPrayerTimes? TodaysPrayers { get; }
     PrayerTime? NextPrayer { get; }
 
-    // Phase 1: reminder (default 15 min before prayer)
+    /// <summary>
+    /// Forward-looking schedule for the upcoming prayer — Remind/Pray/Nudge/Shutdown
+    /// clock times. Returns null when no more prayers today or location not set.
+    /// </summary>
+    NextPhasePlan? GetNextPhasePlan();
+
+    /// <summary>Phase 1: reminder (rule.ReminderMinutesBefore before prayer time).</summary>
     event EventHandler<PrayerTime>? PrayerTimeApproaching;
 
-    // Phase 2: exact prayer time arrived
+    /// <summary>Phase 2: exact prayer time arrived.</summary>
     event EventHandler<PrayerTime>? PrayerTimeArrived;
 
-    // Phase 3: escalating nudges after prayer time
+    /// <summary>Phase 3: escalating nudges after prayer time, up to MaxSnoozeCount.</summary>
     event EventHandler<PrayerNudgeEventArgs>? PrayerNudge;
 
-    // Phase 4: shutdown triggered
-    event EventHandler<PrayerTime>? ShutdownTriggered;
+    /// <summary>
+    /// Phase 4: shutdown is about to happen. Args carry the configured action
+    /// (Shutdown/Sleep/Hibernate/Lock) so the UI can both label the countdown
+    /// correctly and invoke the right <see cref="IShutdownService"/> method.
+    /// </summary>
+    event EventHandler<ShutdownTriggeredEventArgs>? ShutdownTriggered;
 
     /// <summary>
-    /// Fired whenever a prayer is marked as prayed — from overlay, dashboard, or any other source.
-    /// Lets the dashboard keep its cards in sync when the overlay is used.
+    /// Fired whenever a prayer is marked as prayed — from overlay, toast, or dashboard.
+    /// Lets the dashboard keep its cards in sync when the action came from elsewhere.
     /// </summary>
     event EventHandler<PrayerTime>? PrayerMarkedAsPrayed;
 
@@ -32,15 +42,10 @@ public interface ISchedulerService
     void SnoozePrayer(PrayerTime prayer);
 
     /// <summary>
-    /// User clicked "Going to pray" — hides overlay but keeps nudge/shutdown timers active.
-    /// </summary>
-    void SetWaitingForPrayer(PrayerTime prayer);
-
-    /// <summary>
-    /// Cancels the Phase 4 shutdown safety-net timer for the given prayer.
-    /// Called by the UI layer when the overlay countdown reaches zero and the UI
-    /// itself is firing <c>IShutdownService.ExecuteShutdown</c> — without this
-    /// the safety net would fire a second shutdown call seconds later.
+    /// Cancels the Phase 4 shutdown safety-net timer for the given prayer. Called
+    /// by the UI when the overlay countdown reaches zero and the UI itself is firing
+    /// <see cref="IShutdownService.Execute"/> — without this the safety net would
+    /// fire a second shutdown call seconds later.
     /// </summary>
     void CancelShutdownSafety(PrayerName prayerName);
 

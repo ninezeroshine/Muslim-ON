@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PrayerShutdown.Common;
 using PrayerShutdown.Core.Domain.Enums;
@@ -11,49 +12,41 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     private readonly IPrayerTimeCalculator _calculator;
     private readonly ISettingsRepository _settingsRepo;
     private readonly IShutdownService _shutdownService;
-    private readonly INotificationService _notificationService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PrayerScheduler> _logger;
 
-    // Phase 1: reminder timers (X min before prayer)
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _reminderTimers = new();
-    // Phase 2: prayer time arrived timers
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _prayerTimeTimers = new();
-    // Phase 3: nudge timers (escalating after prayer)
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _nudgeTimers = new();
-    // Phase 4: shutdown event timers — fire the ShutdownTriggered event for the UI to react
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _shutdownTimers = new();
-    // Phase 4 safety net: if the UI never confirms shutdown within
-    // (ShutdownCountdownSeconds + ShutdownSafetyBufferSeconds) seconds we fire
-    // ExecuteShutdown ourselves as a fallback. Cancelled by overlay on success
-    // or by MarkAsPrayed/Snooze/Recalculate.
+    // Phase 4 safety net — fires ExecuteShutdown if the overlay never confirms.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, Timer?> _shutdownSafetyTimers = new();
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, int> _snoozeCounts = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, bool> _prayedToday = new();
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, bool> _waitingForPrayer = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<PrayerName, PrayerShutdownRule> _activeRules = new();
     private Timer? _midnightTimer;
 
     public DailyPrayerTimes? TodaysPrayers { get; private set; }
     public PrayerTime? NextPrayer => TodaysPrayers?.GetNextPrayer(DateTime.Now);
 
-    // Phase events
     public event EventHandler<PrayerTime>? PrayerTimeApproaching;
     public event EventHandler<PrayerTime>? PrayerTimeArrived;
     public event EventHandler<PrayerNudgeEventArgs>? PrayerNudge;
-    public event EventHandler<PrayerTime>? ShutdownTriggered;
+    public event EventHandler<ShutdownTriggeredEventArgs>? ShutdownTriggered;
     public event EventHandler<PrayerTime>? PrayerMarkedAsPrayed;
 
     public PrayerScheduler(
         IPrayerTimeCalculator calculator,
         ISettingsRepository settingsRepo,
         IShutdownService shutdownService,
-        INotificationService notificationService,
+        IServiceScopeFactory scopeFactory,
         ILogger<PrayerScheduler> logger)
     {
         _calculator = calculator;
         _settingsRepo = settingsRepo;
         _shutdownService = shutdownService;
-        _notificationService = notificationService;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -73,30 +66,17 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
 
     public void MarkAsPrayed(PrayerTime prayer)
     {
-        _logger.LogInformation(
-            "[MarkAsPrayed] {Prayer} at {Time:HH:mm} — set prayed=true, disposing all phase timers",
-            prayer.Name, prayer.Time);
+        _logger.LogInformation("[MarkAsPrayed] {Prayer} at {Time:HH:mm}", prayer.Name, prayer.Time);
 
         // Order matters: set flag BEFORE disposing timers so any in-flight callback sees prayed=true.
         _prayedToday[prayer.Name] = true;
-        _waitingForPrayer.TryRemove(prayer.Name, out _);
         CancelAllTimersFor(prayer.Name);
 
         if (_shutdownService.HasPendingShutdown)
-        {
-            _logger.LogInformation("[MarkAsPrayed] {Prayer} — cancelling pending system shutdown", prayer.Name);
             _shutdownService.CancelPendingShutdown();
-        }
 
-        // Notify dashboard (or any other listener) so it can sync its card state.
+        LogAction(prayer.Name, "MarkedAsPrayed", "user action");
         PrayerMarkedAsPrayed?.Invoke(this, prayer);
-    }
-
-    public void SetWaitingForPrayer(PrayerTime prayer)
-    {
-        _logger.LogInformation("User going to pray: {Prayer}", prayer.Name);
-        _waitingForPrayer[prayer.Name] = true;
-        // Don't cancel nudge/shutdown timers — user might not come back
     }
 
     public void SnoozePrayer(PrayerTime prayer)
@@ -111,27 +91,19 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
 
         _snoozeCounts[prayer.Name] = count + 1;
         _logger.LogInformation("Snoozed {Prayer} ({Count}/{Max})", prayer.Name, count + 1, Constants.MaxSnoozeCount);
+        LogAction(prayer.Name, "Snoozed", $"{count + 1}/{Constants.MaxSnoozeCount}");
 
         if (_shutdownService.HasPendingShutdown)
             _shutdownService.CancelPendingShutdown();
 
-        // Cancel the previous shutdown safety net — a fresh one will be armed
-        // when OnShutdownTriggered fires after the rescheduled delay below.
-        DisposeTimer(_shutdownSafetyTimers, prayer.Name);
-
-        // Reschedule next nudge
+        // Snooze re-arms the NEXT nudge only. The shutdown timer stays anchored to
+        // prayer.Time + rule.ShutdownMinutesAfter — snoozing must not push the
+        // deadline past what the user configured.
         DisposeTimer(_nudgeTimers, prayer.Name);
-        var delay = TimeSpan.FromMinutes(Constants.NudgeIntervalMinutes);
+        var nudgeDelay = TimeSpan.FromMinutes(Constants.NudgeIntervalMinutes);
         _nudgeTimers[prayer.Name] = new Timer(
-            _ => OnPrayerNudge(prayer, count + 2), // next nudge number (1-indexed, count+1 already happened)
-            null, delay, Timeout.InfiniteTimeSpan);
-
-        // Also reschedule shutdown after the nudge interval
-        DisposeTimer(_shutdownTimers, prayer.Name);
-        var shutdownDelay = TimeSpan.FromMinutes(Constants.NudgeIntervalMinutes * 2);
-        _shutdownTimers[prayer.Name] = new Timer(
-            _ => OnShutdownTriggered(prayer),
-            null, shutdownDelay, Timeout.InfiniteTimeSpan);
+            _ => OnPrayerNudge(prayer, count + 2),
+            null, nudgeDelay, Timeout.InfiniteTimeSpan);
     }
 
     public void CancelShutdownSafety(PrayerName prayerName)
@@ -139,8 +111,35 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         if (_shutdownSafetyTimers.TryRemove(prayerName, out var timer))
         {
             timer?.Dispose();
-            _logger.LogInformation("[CancelShutdownSafety] {Prayer} — overlay handled shutdown, safety net stood down", prayerName);
+            _logger.LogInformation("[CancelShutdownSafety] {Prayer} — overlay handled it", prayerName);
         }
+    }
+
+    public NextPhasePlan? GetNextPhasePlan()
+    {
+        var today = TodaysPrayers;
+        if (today is null) return null;
+
+        var now = DateTime.Now;
+        var next = today.GetNextPrayer(now);
+        if (next is null) return null;
+
+        var rule = _activeRules.TryGetValue(next.Name, out var r) ? r : null;
+        var enabled = rule?.IsEnabled == true;
+        var reminderMin = rule?.ReminderMinutesBefore ?? Constants.DefaultReminderMinutes;
+        var shutdownMin = rule?.ShutdownMinutesAfter ?? Constants.DefaultShutdownDelayMinutes;
+        var action = rule?.Action ?? ShutdownAction.Shutdown;
+
+        return new NextPhasePlan
+        {
+            Prayer = next,
+            RemindAt = enabled ? next.Time.AddMinutes(-reminderMin) : null,
+            PrayAt = next.Time,
+            NudgeAt = enabled ? next.Time.AddMinutes(Constants.NudgeIntervalMinutes) : null,
+            ShutdownAt = enabled ? next.Time.AddMinutes(shutdownMin) : null,
+            Action = action,
+            ShutdownEnabled = enabled,
+        };
     }
 
     private async Task RecalculateAsync(bool preservePrayedState = true)
@@ -148,19 +147,13 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         try
         {
             CancelAllTimers();
+            _activeRules.Clear();
 
             if (!preservePrayedState)
             {
-                _logger.LogInformation("[Recalculate] resetting prayed/snooze/waiting state (midnight)");
+                _logger.LogInformation("[Recalculate] resetting prayed/snooze state (midnight)");
                 _prayedToday.Clear();
                 _snoozeCounts.Clear();
-                _waitingForPrayer.Clear();
-            }
-            else
-            {
-                _logger.LogInformation(
-                    "[Recalculate] preserving prayed state ({Count} prayers marked)",
-                    _prayedToday.Count);
             }
 
             var settings = await _settingsRepo.LoadAsync();
@@ -174,11 +167,12 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
             var today = DateOnly.FromDateTime(DateTime.Today);
             TodaysPrayers = _calculator.Calculate(today, location, settings.Calculation);
 
-            foreach (var rule in settings.Shutdown.Rules.Where(r => r.IsEnabled))
+            foreach (var rule in settings.Shutdown.Rules)
             {
                 var prayer = TodaysPrayers.GetPrayer(rule.Prayer);
                 if (prayer is null) continue;
-                SchedulePrayer(prayer, rule);
+                _activeRules[rule.Prayer] = rule;
+                if (rule.IsEnabled) SchedulePrayer(prayer, rule);
             }
 
             _logger.LogInformation("Scheduled {Count} shutdown-enabled prayers for {Date}",
@@ -193,116 +187,73 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
     private void SchedulePrayer(PrayerTime prayer, PrayerShutdownRule rule)
     {
         // Skip entirely if user already marked this prayer as prayed today.
-        // Prevents settings-save → RecalculateSchedule from re-arming cancelled nudge/shutdown timers.
         if (_prayedToday.ContainsKey(prayer.Name))
         {
-            _logger.LogInformation(
-                "[SchedulePrayer] {Prayer} already prayed today — skipping all phase timers",
-                prayer.Name);
+            _logger.LogInformation("[SchedulePrayer] {Prayer} already prayed — skipping", prayer.Name);
             return;
         }
 
         var now = DateTime.Now;
 
-        // Phase 1: Reminder (X minutes before prayer)
+        // Phase 1: Reminder
         var reminderTime = prayer.Time.AddMinutes(-rule.ReminderMinutesBefore);
         if (reminderTime > now)
-        {
-            var delay = reminderTime - now;
             _reminderTimers[prayer.Name] = new Timer(
                 _ => OnPrayerApproaching(prayer, rule.ReminderMinutesBefore),
-                null, delay, Timeout.InfiniteTimeSpan);
-            _logger.LogDebug("Phase 1 (Reminder) for {Prayer} in {Delay}", prayer.Name, delay);
-        }
+                null, reminderTime - now, Timeout.InfiniteTimeSpan);
 
         // Phase 2: Prayer time arrived
         if (prayer.Time > now)
-        {
-            var delay = prayer.Time - now;
             _prayerTimeTimers[prayer.Name] = new Timer(
                 _ => OnPrayerTimeArrived(prayer),
-                null, delay, Timeout.InfiniteTimeSpan);
-            _logger.LogDebug("Phase 2 (PrayNow) for {Prayer} in {Delay}", prayer.Name, delay);
-        }
+                null, prayer.Time - now, Timeout.InfiniteTimeSpan);
 
-        // Phase 3: First nudge (5 min after prayer)
+        // Phase 3: First nudge
         var firstNudgeTime = prayer.Time.AddMinutes(Constants.NudgeIntervalMinutes);
         if (firstNudgeTime > now)
-        {
-            var delay = firstNudgeTime - now;
             _nudgeTimers[prayer.Name] = new Timer(
                 _ => OnPrayerNudge(prayer, 1),
-                null, delay, Timeout.InfiniteTimeSpan);
-            _logger.LogDebug("Phase 3 (Nudge #1) for {Prayer} in {Delay}", prayer.Name, delay);
-        }
+                null, firstNudgeTime - now, Timeout.InfiniteTimeSpan);
 
-        // Phase 4: Shutdown (ShutdownMinutesAfter after prayer)
+        // Phase 4: Shutdown
         var shutdownTime = prayer.Time.AddMinutes(rule.ShutdownMinutesAfter);
         if (shutdownTime > now)
-        {
-            var delay = shutdownTime - now;
             _shutdownTimers[prayer.Name] = new Timer(
                 _ => OnShutdownTriggered(prayer),
-                null, delay, Timeout.InfiniteTimeSpan);
-            _logger.LogDebug("Phase 4 (Shutdown) for {Prayer} in {Delay}", prayer.Name, delay);
-        }
+                null, shutdownTime - now, Timeout.InfiniteTimeSpan);
     }
 
     // ── Phase 1: Gentle Reminder ──
     private void OnPrayerApproaching(PrayerTime prayer, int minutesBefore)
     {
-        // Guard #1: already prayed
-        if (_prayedToday.ContainsKey(prayer.Name))
-        {
-            _logger.LogInformation("[Phase 1] {Prayer} — skipped, already prayed", prayer.Name);
-            return;
-        }
-        // Guard #2: timer disposed (race between Dispose and pending ThreadPool callback)
-        if (!_reminderTimers.ContainsKey(prayer.Name))
-        {
-            _logger.LogInformation("[Phase 1] {Prayer} — skipped, timer disposed", prayer.Name);
-            return;
-        }
+        if (_prayedToday.ContainsKey(prayer.Name)) return;
+        if (!_reminderTimers.ContainsKey(prayer.Name)) return;
 
         _logger.LogInformation("[Phase 1] {Prayer} approaching in {Min} min", prayer.Name, minutesBefore);
+        LogAction(prayer.Name, "Remind_Fired", $"{minutesBefore} min before");
         PrayerTimeApproaching?.Invoke(this, prayer);
-        _ = _notificationService.ShowPrayerReminderAsync(prayer, minutesBefore);
     }
 
     // ── Phase 2: Prayer Time Arrived ──
     private void OnPrayerTimeArrived(PrayerTime prayer)
     {
-        if (_prayedToday.ContainsKey(prayer.Name))
-        {
-            _logger.LogInformation("[Phase 2] {Prayer} — skipped, already prayed", prayer.Name);
-            return;
-        }
-        if (!_prayerTimeTimers.ContainsKey(prayer.Name))
-        {
-            _logger.LogInformation("[Phase 2] {Prayer} — skipped, timer disposed", prayer.Name);
-            return;
-        }
+        if (_prayedToday.ContainsKey(prayer.Name)) return;
+        if (!_prayerTimeTimers.ContainsKey(prayer.Name)) return;
 
         _logger.LogInformation("[Phase 2] {Prayer} time arrived", prayer.Name);
+        LogAction(prayer.Name, "PrayNow_Fired", prayer.Time.ToString("HH:mm"));
         PrayerTimeArrived?.Invoke(this, prayer);
     }
 
     // ── Phase 3: Escalating Nudge ──
     private void OnPrayerNudge(PrayerTime prayer, int nudgeNumber)
     {
-        if (_prayedToday.ContainsKey(prayer.Name))
-        {
-            _logger.LogInformation("[Phase 3 Nudge #{N}] {Prayer} — skipped, already prayed", nudgeNumber, prayer.Name);
-            return;
-        }
-        if (!_nudgeTimers.ContainsKey(prayer.Name))
-        {
-            _logger.LogInformation("[Phase 3 Nudge #{N}] {Prayer} — skipped, timer disposed", nudgeNumber, prayer.Name);
-            return;
-        }
+        if (_prayedToday.ContainsKey(prayer.Name)) return;
+        if (!_nudgeTimers.ContainsKey(prayer.Name)) return;
 
         var maxNudges = Constants.MaxSnoozeCount;
-        _logger.LogWarning("[Phase 3 Nudge #{N}/{Max}] {Prayer} — firing", nudgeNumber, maxNudges, prayer.Name);
+        _logger.LogWarning("[Phase 3 Nudge #{N}/{Max}] {Prayer}", nudgeNumber, maxNudges, prayer.Name);
+        LogAction(prayer.Name, $"Nudge_{nudgeNumber}_Fired", $"{nudgeNumber}/{maxNudges}");
 
         PrayerNudge?.Invoke(this, new PrayerNudgeEventArgs
         {
@@ -314,83 +265,54 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
 
     // ── Phase 4: Shutdown ──
     //
-    // This is the only path that can shut down the user's PC, so it must be both
-    // visible (always show the overlay) AND reliable (never silently fail to act).
-    // We split the responsibility:
+    // PRIMARY: fire event → UI shows overlay countdown → on countdown=0 UI calls
+    //   IShutdownService.Execute AND ISchedulerService.CancelShutdownSafety.
     //
-    //   PRIMARY:  fire ShutdownTriggered event → UI shows the overlay countdown →
-    //             on countdown=0 the UI calls IShutdownService.ExecuteShutdown
-    //             AND ISchedulerService.CancelShutdownSafety to disarm the timer
-    //             below.
-    //
-    //   SAFETY:   arm a timer for (ShutdownCountdownSeconds + ShutdownSafetyBufferSeconds)
-    //             seconds. If it fires, the overlay never confirmed — call
-    //             ExecuteShutdown ourselves so the user still gets shut down.
-    //             Covers: overlay creation crash, UI freeze, user closed overlay
-    //             via the X button without acting.
-    //
-    // The overlay countdown and the safety timer are deliberately offset by the
-    // safety buffer so the UI always wins the race in the happy path, never
-    // producing two ExecuteShutdown calls.
+    // SAFETY:  arm a timer for (CountdownSeconds + SafetyBuffer). If it fires, the
+    //   overlay never confirmed — call Execute ourselves so the user still gets
+    //   the rule's action. Covers: overlay crash, UI freeze, user closed overlay.
     private void OnShutdownTriggered(PrayerTime prayer)
     {
-        if (_prayedToday.ContainsKey(prayer.Name))
-        {
-            _logger.LogInformation("[Phase 4] {Prayer} — skipped, already prayed", prayer.Name);
-            return;
-        }
-        if (!_shutdownTimers.ContainsKey(prayer.Name))
-        {
-            _logger.LogInformation("[Phase 4] {Prayer} — skipped, timer disposed", prayer.Name);
-            return;
-        }
+        if (_prayedToday.ContainsKey(prayer.Name)) return;
+        if (!_shutdownTimers.ContainsKey(prayer.Name)) return;
 
-        _logger.LogWarning("[Phase 4] {Prayer} — firing event, arming safety net", prayer.Name);
-        ShutdownTriggered?.Invoke(this, prayer);
+        var action = _activeRules.TryGetValue(prayer.Name, out var r) ? r.Action : ShutdownAction.Shutdown;
 
-        // Arm safety net. Disposed by overlay (success path), MarkAsPrayed,
-        // SnoozePrayer, or RecalculateAsync(preservePrayedState:false).
+        _logger.LogWarning("[Phase 4] {Prayer} — firing event, arming safety net (action={Action})", prayer.Name, action);
+        LogAction(prayer.Name, "Shutdown_Triggered", action.ToString());
+
+        ShutdownTriggered?.Invoke(this, new ShutdownTriggeredEventArgs
+        {
+            Prayer = prayer,
+            Action = action,
+        });
+
         DisposeTimer(_shutdownSafetyTimers, prayer.Name);
         var safetyDelay = TimeSpan.FromSeconds(
             Constants.ShutdownCountdownSeconds + Constants.ShutdownSafetyBufferSeconds);
         _shutdownSafetyTimers[prayer.Name] = new Timer(
-            _ => OnShutdownSafetyNetFired(prayer),
+            _ => OnShutdownSafetyNetFired(prayer, action),
             null,
             safetyDelay,
             Timeout.InfiniteTimeSpan);
     }
 
-    private void OnShutdownSafetyNetFired(PrayerTime prayer)
+    private void OnShutdownSafetyNetFired(PrayerTime prayer, ShutdownAction action)
     {
-        // Re-check both gates: the user may have prayed in the last second, or
-        // the overlay may have already started a system shutdown via
-        // _shutdownService.ExecuteShutdown.
-        if (_prayedToday.ContainsKey(prayer.Name))
-        {
-            _logger.LogInformation("[Phase 4 SafetyNet] {Prayer} — skipped, prayed", prayer.Name);
-            return;
-        }
+        if (_prayedToday.ContainsKey(prayer.Name)) return;
         if (_shutdownService.HasPendingShutdown)
         {
-            _logger.LogInformation("[Phase 4 SafetyNet] {Prayer} — skipped, shutdown already pending (overlay handled it)", prayer.Name);
+            _logger.LogInformation("[Phase 4 SafetyNet] {Prayer} — overlay already handled", prayer.Name);
             return;
         }
-        if (!_shutdownSafetyTimers.ContainsKey(prayer.Name))
-        {
-            _logger.LogInformation("[Phase 4 SafetyNet] {Prayer} — skipped, safety net was disarmed", prayer.Name);
-            return;
-        }
+        if (!_shutdownSafetyTimers.ContainsKey(prayer.Name)) return;
 
-        _logger.LogWarning("[Phase 4 SafetyNet] {Prayer} — overlay never confirmed shutdown, FORCING fallback", prayer.Name);
-        _shutdownService.ExecuteShutdown();
+        _logger.LogWarning("[Phase 4 SafetyNet] {Prayer} — FORCING fallback {Action}", prayer.Name, action);
+        LogAction(prayer.Name, "Shutdown_SafetyNet_Fired", action.ToString());
+        _shutdownService.Execute(action);
     }
 
     // ── Debug: manual phase trigger ──
-    /// <summary>
-    /// Debug helper — synthesizes a test PrayerTime and fires the phase event immediately.
-    /// Used by the tray Debug menu to exercise the overlay without waiting for the next prayer.
-    /// Does NOT schedule real timers and does NOT touch _prayedToday state.
-    /// </summary>
     public void TriggerTestPhase(TestPhase phase, PrayerName prayerName)
     {
         var test = new PrayerTime(prayerName, DateTime.Now);
@@ -412,8 +334,11 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
                 });
                 break;
             case TestPhase.Shutdown:
-                // Fire the event ONLY. Do NOT call _shutdownService.ExecuteShutdown() in debug.
-                ShutdownTriggered?.Invoke(this, test);
+                ShutdownTriggered?.Invoke(this, new ShutdownTriggeredEventArgs
+                {
+                    Prayer = test,
+                    Action = ShutdownAction.Shutdown,
+                });
                 break;
         }
     }
@@ -427,10 +352,31 @@ public sealed class PrayerScheduler : ISchedulerService, IDisposable
         _midnightTimer?.Dispose();
         _midnightTimer = new Timer(_ =>
         {
-            _logger.LogInformation("Midnight recalculation triggered — resetting prayed state");
+            _logger.LogInformation("Midnight recalculation triggered");
             _ = RecalculateAsync(preservePrayedState: false);
             ScheduleMidnightRecalculation();
         }, null, delay, Timeout.InfiniteTimeSpan);
+    }
+
+    private void LogAction(PrayerName prayer, string eventName, string detail)
+    {
+        // Fire-and-forget; uses a short-lived DI scope so the scoped IActionLogger
+        // (and its transient DbContext) get disposed after each write.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var logger = scope.ServiceProvider.GetRequiredService<IActionLogger>();
+                await logger.LogAsync(new ActionLogEntry
+                {
+                    Prayer = prayer,
+                    Event = eventName,
+                    Detail = detail,
+                });
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "ActionLogger write failed"); }
+        });
     }
 
     private static void DisposeTimer(

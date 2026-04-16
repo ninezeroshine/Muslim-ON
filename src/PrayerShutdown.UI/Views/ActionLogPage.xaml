@@ -3,29 +3,95 @@
     x:Class="PrayerShutdown.UI.Views.ActionLogPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:log="using:PrayerShutdown.Features.ActionLog"
     Background="Transparent">
 
-    <StackPanel Padding="32,20,32,32" Spacing="16" MaxWidth="600" HorizontalAlignment="Center">
-        <Grid>
-            <TextBlock Text="{x:Bind ActivityLogTitle}" Style="{StaticResource GeistHeading3Style}" VerticalAlignment="Center" />
-            <Button Content="{x:Bind ClearLabel}"
-                    Style="{StaticResource GeistButtonTertiaryStyle}"
-                    HorizontalAlignment="Right" VerticalAlignment="Center" />
-        </Grid>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Padding="32,20,32,32" Spacing="16" MaxWidth="720" HorizontalAlignment="Center">
 
-        <!-- Empty state -->
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Spacing="12" Padding="0,64,0,0">
-            <FontIcon Glyph="&#xE81C;" FontSize="48"
-                      Foreground="{ThemeResource GeistGray600Brush}"
-                      HorizontalAlignment="Center" />
-            <TextBlock Text="{x:Bind NoActivityTitle}"
-                       Style="{StaticResource GeistHeading4Style}"
-                       HorizontalAlignment="Center" />
-            <TextBlock Text="{x:Bind NoActivityDesc}"
-                       Style="{StaticResource GeistBodyDefaultStyle}"
-                       HorizontalAlignment="Center"
-                       Foreground="{ThemeResource GeistGray700Brush}" />
+            <Grid>
+                <TextBlock Text="{x:Bind ActivityLogTitle}" Style="{StaticResource GeistHeading3Style}" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
+                    <Button Style="{StaticResource GeistButtonTertiaryStyle}"
+                            Command="{x:Bind ViewModel.RefreshCommand}"
+                            ToolTipService.ToolTip="{x:Bind LogRefreshLabel}"
+                            Width="36" Height="36" Padding="0">
+                        <FontIcon Glyph="&#xE72C;" FontSize="14" Foreground="{ThemeResource GeistGray600Brush}" />
+                    </Button>
+                    <Button Content="{x:Bind ClearLabel}"
+                            Style="{StaticResource GeistButtonTertiaryStyle}"
+                            Click="OnClearClicked"
+                            Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource InvertBoolVis}}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Empty state -->
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Spacing="12" Padding="0,48,0,0"
+                        Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BoolVis}}">
+                <FontIcon Glyph="&#xE81C;" FontSize="40" Foreground="{ThemeResource GeistGray600Brush}" HorizontalAlignment="Center" />
+                <TextBlock Text="{x:Bind NoActivityTitle}" Style="{StaticResource GeistHeading4Style}" HorizontalAlignment="Center" />
+                <TextBlock Text="{x:Bind NoActivityDesc}" Style="{StaticResource GeistBodyDefaultStyle}"
+                           HorizontalAlignment="Center" Foreground="{ThemeResource GeistGray700Brush}" />
+            </StackPanel>
+
+            <!-- Day groups -->
+            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Days, Mode=OneWay}"
+                           Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource InvertBoolVis}}">
+                <ItemsRepeater.Layout><StackLayout Spacing="16" /></ItemsRepeater.Layout>
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="log:ActionLogDayGroup">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{x:Bind Header}"
+                                       FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{ThemeResource GeistGray700Brush}" />
+                            <Border Background="{ThemeResource GeistBackground200Brush}"
+                                    BorderBrush="{ThemeResource GeistGrayAlpha100Brush}" BorderThickness="1"
+                                    CornerRadius="10" Padding="6">
+                                <ItemsRepeater ItemsSource="{x:Bind Entries}">
+                                    <ItemsRepeater.Layout><StackLayout Spacing="0" /></ItemsRepeater.Layout>
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate x:DataType="log:ActionLogEntryView">
+                                            <Grid Padding="10,8" ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{x:Bind TimeFormatted}"
+                                                           FontFamily="{StaticResource GeistMonoFamily}" FontSize="11"
+                                                           Foreground="{ThemeResource GeistGray500Brush}"
+                                                           VerticalAlignment="Center" MinWidth="58" />
+                                                <FontIcon Grid.Column="1" Glyph="{x:Bind Icon}" FontSize="14" VerticalAlignment="Center">
+                                                    <FontIcon.Foreground><SolidColorBrush Color="{x:Bind AccentColor}" /></FontIcon.Foreground>
+                                                </FontIcon>
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{x:Bind EventLabel}" FontSize="13" FontWeight="Medium"
+                                                               Foreground="{ThemeResource GeistGray1000Brush}" />
+                                                    <TextBlock Text="{x:Bind Detail}" FontSize="11"
+                                                               Foreground="{ThemeResource GeistGray600Brush}"
+                                                               Visibility="{x:Bind HasDetail, Converter={StaticResource BoolVis}}" />
+                                                </StackPanel>
+                                                <Border Grid.Column="3" CornerRadius="9999" Padding="8,3" VerticalAlignment="Center">
+                                                    <Border.Background><SolidColorBrush Color="{x:Bind AccentColor}" Opacity="0.12" /></Border.Background>
+                                                    <TextBlock Text="{x:Bind PrayerName}" FontSize="11" FontWeight="Medium">
+                                                        <TextBlock.Foreground><SolidColorBrush Color="{x:Bind AccentColor}" /></TextBlock.Foreground>
+                                                    </TextBlock>
+                                                </Border>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </Border>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
+
+            <ProgressRing Width="24" Height="24" HorizontalAlignment="Center"
+                          IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
+                          Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolVis}}" />
         </StackPanel>
-    </StackPanel>
+    </ScrollViewer>
 </Page>

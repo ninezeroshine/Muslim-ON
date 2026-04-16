@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using Microsoft.Extensions.Logging;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -18,6 +17,7 @@ public sealed partial class PrayerOverlayWindow : Window
     private PrayerTime? _prayer;
     private int _nudgeNumber;
     private int _maxNudges;
+    private ShutdownAction _shutdownAction = ShutdownAction.Shutdown;
     private int _shutdownCountdown;
     private DispatcherQueueTimer? _countdownTimer;
     private DispatcherQueueTimer? _clockTimer;
@@ -43,16 +43,19 @@ public sealed partial class PrayerOverlayWindow : Window
         Closed += (_, _) => _isClosed = true;
     }
 
-    public void ShowPhase(OverlayPhase phase, PrayerTime prayer, int nudgeNumber = 0, int maxNudges = 0)
+    public void ShowPhase(OverlayPhase phase, PrayerTime prayer,
+        int nudgeNumber = 0, int maxNudges = 0,
+        ShutdownAction shutdownAction = ShutdownAction.Shutdown)
     {
         _phase = phase;
         _prayer = prayer;
         _nudgeNumber = nudgeNumber;
         _maxNudges = maxNudges;
+        _shutdownAction = shutdownAction;
 
         UpdateUI();
-        SafeWin32(() => SetTopmost());
-        SafeWin32(() => ResizeAndCenter());
+        SafeWin32(SetTopmost);
+        SafeWin32(ResizeAndCenter);
         Activate();
 
         _clockTimer?.Start();
@@ -80,7 +83,6 @@ public sealed partial class PrayerOverlayWindow : Window
         PrayerTimeText.Text = _prayer.Time.ToString("HH:mm");
         PrayedButton.Content = Loc.S("mark_prayed");
 
-        // Control backdrop visibility from code (not x:Bind)
         BackdropBorder.Visibility = _phase == OverlayPhase.Shutdown
             ? Visibility.Visible : Visibility.Collapsed;
 
@@ -132,9 +134,9 @@ public sealed partial class PrayerOverlayWindow : Window
 
             case OverlayPhase.Shutdown:
                 PhaseIcon.Text = "\U0001F6A8";
-                TitleText.Text = Loc.S("shutdown_warning_title");
+                TitleText.Text = GetShutdownTitle(_shutdownAction);
                 _shutdownCountdown = Constants.ShutdownCountdownSeconds;
-                DescriptionText.Text = string.Format(Loc.S("shutdown_warning_desc"), _shutdownCountdown);
+                DescriptionText.Text = string.Format(GetShutdownDescKey(_shutdownAction), _shutdownCountdown);
                 SecondaryButton.Visibility = Visibility.Collapsed;
                 SnoozeInfoText.Visibility = Visibility.Collapsed;
                 CountdownText.Text = $"{_shutdownCountdown}s";
@@ -144,6 +146,22 @@ public sealed partial class PrayerOverlayWindow : Window
 
         UpdateClockCountdown();
     }
+
+    private static string GetShutdownTitle(ShutdownAction action) => action switch
+    {
+        ShutdownAction.Sleep => Loc.S("action_sleep_title"),
+        ShutdownAction.Hibernate => Loc.S("action_hibernate_title"),
+        ShutdownAction.Lock => Loc.S("action_lock_title"),
+        _ => Loc.S("shutdown_warning_title"),
+    };
+
+    private static string GetShutdownDescKey(ShutdownAction action) => action switch
+    {
+        ShutdownAction.Sleep => Loc.S("action_sleep_desc"),
+        ShutdownAction.Hibernate => Loc.S("action_hibernate_desc"),
+        ShutdownAction.Lock => Loc.S("action_lock_desc"),
+        _ => Loc.S("shutdown_warning_desc"),
+    };
 
     private void UpdateClockCountdown()
     {
@@ -171,7 +189,7 @@ public sealed partial class PrayerOverlayWindow : Window
         {
             _shutdownCountdown--;
             CountdownText.Text = $"{_shutdownCountdown}s";
-            DescriptionText.Text = string.Format(Loc.S("shutdown_warning_desc"), _shutdownCountdown);
+            DescriptionText.Text = string.Format(GetShutdownDescKey(_shutdownAction), _shutdownCountdown);
 
             if (_shutdownCountdown <= 0)
             {
@@ -219,7 +237,7 @@ public sealed partial class PrayerOverlayWindow : Window
             if (Content is FrameworkElement fe && fe.Resources.TryGetValue(brushKey, out var brush))
                 CountdownText.Foreground = (Microsoft.UI.Xaml.Media.Brush)brush;
         }
-        catch { /* keep default color */ }
+        catch { }
     }
 
     private void SetSnoozeColor(string brushKey)
@@ -229,7 +247,7 @@ public sealed partial class PrayerOverlayWindow : Window
             if (Content is FrameworkElement fe && fe.Resources.TryGetValue(brushKey, out var brush))
                 SnoozeInfoText.Foreground = (Microsoft.UI.Xaml.Media.Brush)brush;
         }
-        catch { /* keep default color */ }
+        catch { }
     }
 
     // ── Win32 Topmost ──
@@ -298,7 +316,7 @@ public sealed partial class PrayerOverlayWindow : Window
             Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
             File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{context}] {ex}\n");
         }
-        catch { /* last resort — can't log */ }
+        catch { }
     }
 
     private static class NativeMethods

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
+using PrayerShutdown.Core.Domain.Enums;
 using PrayerShutdown.Core.Interfaces;
 
 namespace PrayerShutdown.Services.Shutdown;
@@ -17,27 +18,34 @@ public sealed class WindowsShutdownService : IShutdownService
         _logger = logger;
     }
 
-    public void ExecuteShutdown()
+    public void Execute(ShutdownAction action)
     {
-        _logger.LogWarning("Executing system shutdown");
-        _hasPending = true;
-        StartProcess("shutdown", "/s /t 60 /c \"Muslim ON: Time for prayer.\"");
-    }
+        _logger.LogWarning("Executing {Action}", action);
 
-    public void ExecuteHibernate()
-    {
-        _logger.LogInformation("Executing hibernate");
-        SetSuspendState(hibernate: true);
-    }
-
-    public void ExecuteSleep()
-    {
-        _logger.LogInformation("Executing sleep");
-        SetSuspendState(hibernate: false);
+        switch (action)
+        {
+            case ShutdownAction.Shutdown:
+                _hasPending = true;
+                StartProcess("shutdown", "/s /t 60 /c \"Muslim ON: Time for prayer.\"");
+                break;
+            case ShutdownAction.Hibernate:
+                SetSuspendState(hibernate: true);
+                break;
+            case ShutdownAction.Sleep:
+                SetSuspendState(hibernate: false);
+                break;
+            case ShutdownAction.Lock:
+                LockWorkstation();
+                break;
+            case ShutdownAction.None:
+                _logger.LogInformation("Execute({Action}) — no-op", action);
+                break;
+        }
     }
 
     public void CancelPendingShutdown()
     {
+        if (!_hasPending) return;
         _logger.LogInformation("Cancelling pending shutdown");
         _hasPending = false;
         StartProcess("shutdown", "/a");
@@ -52,7 +60,7 @@ public sealed class WindowsShutdownService : IShutdownService
                 FileName = fileName,
                 Arguments = arguments,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
             });
         }
         catch (Exception ex)
@@ -63,23 +71,27 @@ public sealed class WindowsShutdownService : IShutdownService
 
     private void SetSuspendState(bool hibernate)
     {
-        try
-        {
-            NativeMethods.SetSuspendState(hibernate, true, true);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to set suspend state (hibernate={Hibernate})", hibernate);
-        }
+        try { NativeMethods.SetSuspendState(hibernate, true, true); }
+        catch (Exception ex) { _logger.LogError(ex, "Failed to set suspend state (hibernate={Hibernate})", hibernate); }
+    }
+
+    private void LockWorkstation()
+    {
+        try { NativeMethods.LockWorkStation(); }
+        catch (Exception ex) { _logger.LogError(ex, "Failed to lock workstation"); }
     }
 
     private static class NativeMethods
     {
-        [System.Runtime.InteropServices.DllImport("PowrProf.dll", SetLastError = true)]
+        [DllImport("PowrProf.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetSuspendState(
             [MarshalAs(UnmanagedType.Bool)] bool hibernate,
             [MarshalAs(UnmanagedType.Bool)] bool forceCritical,
             [MarshalAs(UnmanagedType.Bool)] bool disableWakeEvent);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool LockWorkStation();
     }
 }

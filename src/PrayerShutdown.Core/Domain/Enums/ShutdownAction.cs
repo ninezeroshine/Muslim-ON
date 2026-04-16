@@ -5,5 +5,6 @@ public enum ShutdownAction
     None,
     Shutdown,
     Hibernate,
-    Sleep
+    Sleep,
+    Lock,
 }

@@ -134,7 +134,7 @@ public sealed class LocalizationService
 
         // About
         ["about_title"] = "Muslim ON",
-        ["about_version"] = "Version 1.3.0",
+        ["about_version"] = "Version 1.4.0",
         ["about_desc"] = "Automatic prayer time reminders with optional PC shutdown. Helps you maintain your daily prayers.",
         ["about_tech"] = "Built with WinUI 3 + .NET 8",
         ["about_algorithm"] = "Prayer times: PrayTimes.org algorithm",
@@ -202,6 +202,63 @@ public sealed class LocalizationService
         // Tray menu
         ["tray_open"] = "Open Muslim ON",
         ["tray_exit"] = "Exit",
+        ["tray_next"] = "Next: {0} at {1}",
+        ["tray_phase_in"] = "{0} in {1}",
+
+        // Toast notifications
+        ["toast_remind_title"] = "{0} prayer approaching",
+        ["toast_remind_body"] = "In {0} min (at {1})",
+        ["toast_pray_title"] = "{0} \u2014 time to pray",
+        ["toast_pray_body"] = "Prayer time is {0}",
+        ["toast_nudge_title"] = "Prayer reminder",
+        ["toast_nudge_body"] = "You still haven't prayed {0} \u2014 reminder {1}/{2}",
+
+        // Action-specific shutdown phase labels
+        ["action_sleep_title"] = "PC going to sleep",
+        ["action_sleep_desc"] = "You didn't pray. Your PC will sleep in {0} seconds.",
+        ["action_hibernate_title"] = "PC going to hibernate",
+        ["action_hibernate_desc"] = "You didn't pray. Your PC will hibernate in {0} seconds.",
+        ["action_lock_title"] = "PC will be locked",
+        ["action_lock_desc"] = "You didn't pray. Your PC will be locked in {0} seconds.",
+        ["action_shutdown_label"] = "Shutdown",
+        ["action_sleep_label"] = "Sleep",
+        ["action_hibernate_label"] = "Hibernate",
+        ["action_lock_label"] = "Lock",
+        ["action_none_label"] = "None",
+
+        // Dashboard Next Steps block
+        ["next_steps_title"] = "What happens next \u2014 {0}",
+        ["next_steps_empty"] = "No actions scheduled. Enable shutdown for this prayer in Settings.",
+        ["phase_remind"] = "Reminder",
+        ["phase_pray_now"] = "Prayer time",
+        ["phase_nudge"] = "First nudge",
+        ["phase_shutdown"] = "Shutdown",
+
+        // Activity log (full page)
+        ["log_refresh"] = "Refresh",
+        ["log_empty_title"] = "No activity yet",
+        ["log_empty_desc"] = "Prayer events, reminders and shutdowns will appear here",
+        ["log_group_today"] = "Today",
+        ["log_group_yesterday"] = "Yesterday",
+        ["log_confirm_clear"] = "Clear activity log? This cannot be undone.",
+        ["log_event_Remind_Fired"] = "Reminder shown",
+        ["log_event_PrayNow_Fired"] = "Prayer time arrived",
+        ["log_event_Nudge_1_Fired"] = "First nudge",
+        ["log_event_Nudge_2_Fired"] = "Second nudge",
+        ["log_event_Nudge_3_Fired"] = "Third nudge",
+        ["log_event_Shutdown_Triggered"] = "Shutdown triggered",
+        ["log_event_Shutdown_SafetyNet_Fired"] = "Shutdown (safety net)",
+        ["log_event_Shutdown_Shutdown"] = "PC shut down",
+        ["log_event_Shutdown_Sleep"] = "PC sent to sleep",
+        ["log_event_Shutdown_Hibernate"] = "PC hibernated",
+        ["log_event_Shutdown_Lock"] = "PC locked",
+        ["log_event_Shutdown_Cancelled"] = "Shutdown cancelled",
+        ["log_event_MarkedAsPrayed"] = "Marked as prayed",
+        ["log_event_Snoozed"] = "Snoozed",
+        ["log_event_GoingToPray"] = "Going to pray",
+        ["log_event_Overlay_Shown"] = "Overlay shown",
+        ["log_event_Overlay_Closed"] = "Overlay closed",
+        ["log_event_ToastDismissed"] = "Toast dismissed",
     };
 
     // ════════════════════════════════════════════
@@ -298,7 +355,7 @@ public sealed class LocalizationService
 
         // О приложении
         ["about_title"] = "Muslim ON",
-        ["about_version"] = "Версия 1.3.0",
+        ["about_version"] = "Версия 1.4.0",
         ["about_desc"] = "Автоматические напоминания о намазе с возможностью выключения ПК. Помогает соблюдать ежедневные молитвы.",
         ["about_tech"] = "Создано на WinUI 3 + .NET 8",
         ["about_algorithm"] = "Расчёт времён: алгоритм PrayTimes.org",
@@ -366,6 +423,63 @@ public sealed class LocalizationService
         // Меню в трее
         ["tray_open"] = "Открыть Muslim ON",
         ["tray_exit"] = "Выход",
+        ["tray_next"] = "Следующий: {0} в {1}",
+        ["tray_phase_in"] = "{0} через {1}",
+
+        // Toast-уведомления
+        ["toast_remind_title"] = "Скоро {0}",
+        ["toast_remind_body"] = "Через {0} мин (в {1})",
+        ["toast_pray_title"] = "{0} \u2014 время молитвы",
+        ["toast_pray_body"] = "Время намаза \u2014 {0}",
+        ["toast_nudge_title"] = "Напоминание о намазе",
+        ["toast_nudge_body"] = "Вы ещё не совершили {0} \u2014 напоминание {1}/{2}",
+
+        // Подписи для разных действий выключения
+        ["action_sleep_title"] = "ПК уходит в сон",
+        ["action_sleep_desc"] = "Вы не помолились. ПК уйдёт в сон через {0} секунд.",
+        ["action_hibernate_title"] = "ПК переходит в гибернацию",
+        ["action_hibernate_desc"] = "Вы не помолились. ПК перейдёт в гибернацию через {0} секунд.",
+        ["action_lock_title"] = "ПК будет заблокирован",
+        ["action_lock_desc"] = "Вы не помолились. ПК заблокируется через {0} секунд.",
+        ["action_shutdown_label"] = "Выключение",
+        ["action_sleep_label"] = "Сон",
+        ["action_hibernate_label"] = "Гибернация",
+        ["action_lock_label"] = "Блокировка",
+        ["action_none_label"] = "Нет",
+
+        // Блок «Что дальше» на дашборде
+        ["next_steps_title"] = "Что произойдёт дальше \u2014 {0}",
+        ["next_steps_empty"] = "Действий не запланировано. Включите выключение для этого намаза в настройках.",
+        ["phase_remind"] = "Напоминание",
+        ["phase_pray_now"] = "Время намаза",
+        ["phase_nudge"] = "Первый повтор",
+        ["phase_shutdown"] = "Выключение",
+
+        // Журнал активности (страница)
+        ["log_refresh"] = "Обновить",
+        ["log_empty_title"] = "Пока нет записей",
+        ["log_empty_desc"] = "Здесь будут отображаться события молитв, напоминания и выключения",
+        ["log_group_today"] = "Сегодня",
+        ["log_group_yesterday"] = "Вчера",
+        ["log_confirm_clear"] = "Очистить журнал активности? Действие нельзя отменить.",
+        ["log_event_Remind_Fired"] = "Напоминание показано",
+        ["log_event_PrayNow_Fired"] = "Наступило время намаза",
+        ["log_event_Nudge_1_Fired"] = "Первый повтор",
+        ["log_event_Nudge_2_Fired"] = "Второй повтор",
+        ["log_event_Nudge_3_Fired"] = "Третий повтор",
+        ["log_event_Shutdown_Triggered"] = "Запущено выключение",
+        ["log_event_Shutdown_SafetyNet_Fired"] = "Выключение (аварийный таймер)",
+        ["log_event_Shutdown_Shutdown"] = "ПК выключен",
+        ["log_event_Shutdown_Sleep"] = "ПК в режиме сна",
+        ["log_event_Shutdown_Hibernate"] = "ПК в гибернации",
+        ["log_event_Shutdown_Lock"] = "ПК заблокирован",
+        ["log_event_Shutdown_Cancelled"] = "Выключение отменено",
+        ["log_event_MarkedAsPrayed"] = "Отмечено как совершённый",
+        ["log_event_Snoozed"] = "Отложено",
+        ["log_event_GoingToPray"] = "Идёт молиться",
+        ["log_event_Overlay_Shown"] = "Оверлей показан",
+        ["log_event_Overlay_Closed"] = "Оверлей закрыт",
+        ["log_event_ToastDismissed"] = "Toast закрыт",
     };
 }
 

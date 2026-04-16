@@ -32,13 +32,6 @@
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
                         <Button Style="{StaticResource GeistButtonTertiaryStyle}"
                                 Width="36" Height="36" Padding="0"
-                                Visibility="{x:Bind ViewModel.ShowShutdownHint, Mode=OneWay}"
-                                Command="{x:Bind ViewModel.ExpandShutdownInfoCommand}"
-                                ToolTipService.ToolTip="{x:Bind L_ShutdownHow}">
-                            <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource GeistGray600Brush}" />
-                        </Button>
-                        <Button Style="{StaticResource GeistButtonTertiaryStyle}"
-                                Width="36" Height="36" Padding="0"
                                 Visibility="{x:Bind ViewModel.ShowWisdomHint, Mode=OneWay}"
                                 Command="{x:Bind ViewModel.ExpandWisdomCommand}"
                                 ToolTipService.ToolTip="{x:Bind L_WisdomTitle}">
@@ -155,30 +148,54 @@
             <!-- ═══ ROW 4: Error ═══ -->
             <InfoBar Grid.Row="4" IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}" Severity="Error" Title="Error" Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" Margin="0,0,0,12" />
 
-            <!-- ═══ ROW 5: Shutdown Info ═══ -->
-            <Border Grid.Row="5" Visibility="{x:Bind ViewModel.ShowShutdownInfo, Mode=OneWay}"
-                    Background="{ThemeResource GeistBackground200Brush}" CornerRadius="12" Padding="20" Margin="0,0,0,16"
+            <!-- ═══ ROW 5: Next Steps (phase timeline for upcoming prayer) ═══ -->
+            <Border Grid.Row="5" Visibility="{x:Bind ViewModel.HasNextSteps, Mode=OneWay}"
+                    Background="{ThemeResource GeistBackground200Brush}" CornerRadius="12" Padding="20,16" Margin="0,0,0,12"
                     BorderBrush="{ThemeResource GeistGrayAlpha100Brush}" BorderThickness="1">
                 <StackPanel Spacing="12">
-                    <Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE7E8;" FontSize="16" Foreground="{ThemeResource GeistGray700Brush}" VerticalAlignment="Center" />
-                            <TextBlock Text="{x:Bind L_ShutdownHow}" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource GeistGray1000Brush}" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <Button Style="{StaticResource GeistButtonTertiaryStyle}" HorizontalAlignment="Right" Width="28" Height="28" Padding="0" Command="{x:Bind ViewModel.DismissShutdownInfoCommand}">
-                            <FontIcon Glyph="&#xE711;" FontSize="10" Foreground="{ThemeResource GeistGray600Brush}" />
-                        </Button>
-                    </Grid>
-                    <StackPanel Spacing="6" Margin="4,0,0,0">
-                        <StackPanel Orientation="Horizontal" Spacing="10"><Ellipse Width="6" Height="6" Fill="{ThemeResource GeistBlue700Brush}" VerticalAlignment="Center" Margin="3,0" /><TextBlock Text="{x:Bind ViewModel.ShutdownStep1, Mode=OneWay}" FontSize="13" Foreground="{ThemeResource GeistGray900Brush}" TextWrapping="Wrap" /></StackPanel>
-                        <Border Width="2" Height="6" Background="{ThemeResource GeistGray400Brush}" HorizontalAlignment="Left" Margin="5,0" CornerRadius="1" />
-                        <StackPanel Orientation="Horizontal" Spacing="10"><Ellipse Width="6" Height="6" Fill="{ThemeResource GeistWarningBrush}" VerticalAlignment="Center" Margin="3,0" /><TextBlock Text="{x:Bind ViewModel.ShutdownStep2, Mode=OneWay}" FontSize="13" Foreground="{ThemeResource GeistGray900Brush}" TextWrapping="Wrap" /></StackPanel>
-                        <Border Width="2" Height="6" Background="{ThemeResource GeistGray400Brush}" HorizontalAlignment="Left" Margin="5,0" CornerRadius="1" />
-                        <StackPanel Orientation="Horizontal" Spacing="10"><Ellipse Width="6" Height="6" Fill="{ThemeResource GeistErrorBrush}" VerticalAlignment="Center" Margin="3,0" /><TextBlock Text="{x:Bind ViewModel.ShutdownStep3, Mode=OneWay}" FontSize="13" Foreground="{ThemeResource GeistGray900Brush}" TextWrapping="Wrap" /></StackPanel>
-                        <Border Width="2" Height="6" Background="{ThemeResource GeistGray400Brush}" HorizontalAlignment="Left" Margin="5,0" CornerRadius="1" />
-                        <StackPanel Orientation="Horizontal" Spacing="10"><Ellipse Width="6" Height="6" Fill="{ThemeResource GeistSuccessBrush}" VerticalAlignment="Center" Margin="3,0" /><TextBlock Text="{x:Bind ViewModel.ShutdownStep4, Mode=OneWay}" FontSize="13" Foreground="{ThemeResource GeistGray900Brush}" TextWrapping="Wrap" /></StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE916;" FontSize="14" Foreground="{ThemeResource GeistGray700Brush}" VerticalAlignment="Center" />
+                        <TextBlock Text="{x:Bind ViewModel.NextStepsTitle, Mode=OneWay}"
+                                   FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{ThemeResource GeistGray1000Brush}"
+                                   VerticalAlignment="Center" />
                     </StackPanel>
-                    <Button Content="{x:Bind L_GotIt}" Style="{StaticResource GeistButtonSecondaryStyle}" HorizontalAlignment="Stretch" Height="34" Command="{x:Bind ViewModel.DismissShutdownInfoCommand}" />
+                    <TextBlock Text="{x:Bind ViewModel.NextStepsEmptyMessage, Mode=OneWay}"
+                               Visibility="{x:Bind ViewModel.ShowNextStepsEmpty, Mode=OneWay, Converter={StaticResource BoolVis}}"
+                               FontSize="12" Foreground="{ThemeResource GeistGray600Brush}" TextWrapping="Wrap" />
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.NextSteps, Mode=OneWay}">
+                        <ItemsRepeater.Layout><StackLayout Spacing="8" /></ItemsRepeater.Layout>
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="local:PhaseStepModel">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Grid.Column="0" Width="9" Height="9" VerticalAlignment="Center">
+                                        <Ellipse.Fill><SolidColorBrush Color="{x:Bind Dot}" /></Ellipse.Fill>
+                                    </Ellipse>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind Label}" FontSize="13"
+                                                   FontWeight="Medium"
+                                                   Foreground="{ThemeResource GeistGray1000Brush}"
+                                                   Opacity="{x:Bind DoneOpacity}" />
+                                        <TextBlock Text="{x:Bind Detail}" FontSize="11"
+                                                   Foreground="{ThemeResource GeistGray600Brush}"
+                                                   VerticalAlignment="Center"
+                                                   Visibility="{x:Bind HasDetail, Converter={StaticResource BoolVis}}" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{x:Bind TimeFormatted}"
+                                               FontFamily="{StaticResource GeistMonoFamily}"
+                                               FontSize="13"
+                                               Foreground="{ThemeResource GeistGray900Brush}"
+                                               VerticalAlignment="Center"
+                                               Opacity="{x:Bind DoneOpacity}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
                 </StackPanel>
             </Border>
 
@@ -320,18 +337,11 @@
                                 </Button>
 
                                 <!-- "I Prayed" button -->
-                                <Button Grid.Column="5" Visibility="{x:Bind CanMarkPrayed, Mode=OneWay}"
+                                <Button Grid.Column="5" Visibility="{x:Bind CanMarkPrayed, Mode=OneWay, Converter={StaticResource BoolVis}}"
                                         Command="{x:Bind MarkAsPrayedCommand}"
                                         Style="{StaticResource GeistButtonTertiaryStyle}" Width="32" Height="32" Padding="0"
                                         VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind PrayedTooltip}">
                                     <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="{ThemeResource GeistSuccessBrush}" />
-                                </Button>
-                                <!-- Undo button (5 sec window) -->
-                                <Button Grid.Column="5" Visibility="{x:Bind CanUndo, Mode=OneWay}"
-                                        Command="{x:Bind UndoPrayedCommand}"
-                                        Style="{StaticResource GeistButtonTertiaryStyle}" Width="32" Height="32" Padding="0"
-                                        VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind UndoTooltip}">
-                                    <FontIcon Glyph="&#xE7A7;" FontSize="14" Foreground="{ThemeResource GeistWarningBrush}" />
                                 </Button>
                             </Grid>
                         </Border>

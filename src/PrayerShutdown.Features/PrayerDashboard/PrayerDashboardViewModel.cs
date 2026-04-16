@@ -42,14 +42,7 @@ public partial class PrayerDashboardViewModel : ObservableObject
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private string _countdownColor = "#171717";
 
-    // ── Shutdown info ──
-    [ObservableProperty] private bool _showShutdownInfo;
     [ObservableProperty] private bool _anyShutdownEnabled;
-    public bool ShowShutdownHint => !ShowShutdownInfo && HasLocation;
-    public string ShutdownStep1 => string.Format(Loc.S("shutdown_step1"), "15");
-    public string ShutdownStep2 => Loc.S("shutdown_step2");
-    public string ShutdownStep3 => string.Format(Loc.S("shutdown_step3"), "15");
-    public string ShutdownStep4 => string.Format(Loc.S("shutdown_step4"), "3");
 
     // ── Feature 6: Jumu'ah ──
     [ObservableProperty] private bool _isFriday;
@@ -68,6 +61,13 @@ public partial class PrayerDashboardViewModel : ObservableObject
     // ── Feature 4: Day timeline ──
     [ObservableProperty] private double _currentTimePosition;
     [ObservableProperty] private ObservableCollection<TimelineDotModel> _timelineDots = new();
+
+    // ── Next-steps block (what scheduler will do if user does nothing) ──
+    [ObservableProperty] private ObservableCollection<PhaseStepModel> _nextSteps = new();
+    [ObservableProperty] private string _nextStepsTitle = "";
+    [ObservableProperty] private bool _hasNextSteps;
+    [ObservableProperty] private bool _showNextStepsEmpty;
+    [ObservableProperty] private string _nextStepsEmptyMessage = "";
 
     // ── Work day overlay ──
     [ObservableProperty] private bool _workDayEnabled;
@@ -275,8 +275,96 @@ public partial class PrayerDashboardViewModel : ObservableObject
 
         UpdateProgress(now, nextCard);
         UpdateWorkDayInfo(now);
+        UpdateNextSteps(now);
         CurrentTimePosition = now.TimeOfDay.TotalMinutes / 1440.0;
     }
+
+    // ═══════════════════════════════════════════
+    //  Next Steps block (phase timeline)
+    // ═══════════════════════════════════════════
+
+    private void UpdateNextSteps(DateTime now)
+    {
+        var plan = _scheduler.GetNextPhasePlan();
+        if (plan is null)
+        {
+            HasNextSteps = false;
+            NextSteps.Clear();
+            return;
+        }
+
+        var prayerName = Loc.S($"prayer_{plan.Prayer.Name.ToString().ToLowerInvariant()}");
+        NextStepsTitle = string.Format(Loc.S("next_steps_title"), prayerName);
+
+        if (!plan.ShutdownEnabled)
+        {
+            HasNextSteps = true;
+            ShowNextStepsEmpty = true;
+            NextStepsEmptyMessage = Loc.S("next_steps_empty");
+            NextSteps = new ObservableCollection<PhaseStepModel>
+            {
+                new() {
+                    Label = Loc.S("phase_pray_now"),
+                    TimeFormatted = plan.PrayAt.ToString("HH:mm"),
+                    Dot = ColorTokens.Blue,
+                    IsDone = plan.PrayAt <= now,
+                }
+            };
+            return;
+        }
+
+        ShowNextStepsEmpty = false;
+        NextStepsEmptyMessage = "";
+        var steps = new List<PhaseStepModel>();
+
+        if (plan.RemindAt is { } remindAt)
+            steps.Add(new PhaseStepModel
+            {
+                Label = Loc.S("phase_remind"),
+                TimeFormatted = remindAt.ToString("HH:mm"),
+                Dot = ColorTokens.Gray,
+                IsDone = remindAt <= now,
+            });
+
+        steps.Add(new PhaseStepModel
+        {
+            Label = Loc.S("phase_pray_now"),
+            TimeFormatted = plan.PrayAt.ToString("HH:mm"),
+            Dot = ColorTokens.Blue,
+            IsDone = plan.PrayAt <= now,
+        });
+
+        if (plan.NudgeAt is { } nudgeAt)
+            steps.Add(new PhaseStepModel
+            {
+                Label = Loc.S("phase_nudge"),
+                TimeFormatted = nudgeAt.ToString("HH:mm"),
+                Dot = ColorTokens.Warning,
+                IsDone = nudgeAt <= now,
+            });
+
+        if (plan.ShutdownAt is { } shutdownAt)
+            steps.Add(new PhaseStepModel
+            {
+                Label = Loc.S("phase_shutdown"),
+                TimeFormatted = shutdownAt.ToString("HH:mm"),
+                Dot = ColorTokens.Error,
+                IsDone = shutdownAt <= now,
+                Detail = ActionLabel(plan.Action),
+            });
+
+        NextSteps = new ObservableCollection<PhaseStepModel>(steps);
+        HasNextSteps = true;
+    }
+
+    private static string ActionLabel(ShutdownAction action) => action switch
+    {
+        ShutdownAction.Shutdown => Loc.S("action_shutdown_label"),
+        ShutdownAction.Sleep => Loc.S("action_sleep_label"),
+        ShutdownAction.Hibernate => Loc.S("action_hibernate_label"),
+        ShutdownAction.Lock => Loc.S("action_lock_label"),
+        _ => Loc.S("action_none_label"),
+    };
 
     // ═══════════════════════════════════════════
     //  Progress bar (Feature 2)
@@ -417,8 +505,6 @@ public partial class PrayerDashboardViewModel : ObservableObject
     //  Shutdown info commands
     // ═══════════════════════════════════════════
 
-    [RelayCommand] private void DismissShutdownInfo()  { ShowShutdownInfo = false; OnPropertyChanged(nameof(ShowShutdownHint)); }
-    [RelayCommand] private void ExpandShutdownInfo()   { ShowShutdownInfo = true;  OnPropertyChanged(nameof(ShowShutdownHint)); }
     [RelayCommand] private void DismissWisdom()        { ShowWisdom = false; }
     [RelayCommand] private void ExpandWisdom()         { ShowWisdom = true; }
     [RelayCommand] private void ToggleWorkDayEditor()  { ShowWorkDayEditor = !ShowWorkDayEditor; }
